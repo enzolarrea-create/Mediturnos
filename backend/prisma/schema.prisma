@@ -1,0 +1,241 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuario base
+model Usuario {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  nombre            String
+  apellido          String
+  dni               String    @unique
+  fechaNacimiento   DateTime
+  telefono          String?
+  direccion         String?
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relaciones con roles específicos
+  paciente          Paciente?
+  medico            Medico?
+  secretario        Secretario?
+  administrador     Administrador?
+
+  // Relaciones
+  turnosCreados    Turno[]   @relation("TurnosCreadosPor")
+  notificaciones   Notificacion[]
+
+  @@index([email])
+  @@index([dni])
+  @@map("usuarios")
+}
+
+// Modelo de Paciente
+model Paciente {
+  id                String    @id @default(uuid())
+  usuarioId         String    @unique
+  contactoEmergencia String?
+  telefonoEmergencia String?
+  obraSocial        String?
+  numeroAfiliado    String?
+  alergias          String?
+  medicamentos      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  turnos            Turno[]
+  notasMedicas      NotaMedica[]
+
+  @@map("pacientes")
+}
+
+// Modelo de Médico
+model Medico {
+  id                String    @id @default(uuid())
+  usuarioId         String    @unique
+  matricula         String    @unique
+  especialidadId    String
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  especialidad      Especialidad @relation(fields: [especialidadId], references: [id])
+  turnos            Turno[]
+  disponibilidades  Disponibilidad[]
+  notasMedicas      NotaMedica[]
+
+  @@index([especialidadId])
+  @@map("medicos")
+}
+
+// Modelo de Secretario
+model Secretario {
+  id                String    @id @default(uuid())
+  usuarioId         String    @unique
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("secretarios")
+}
+
+// Modelo de Administrador
+model Administrador {
+  id                String    @id @default(uuid())
+  usuarioId         String    @unique
+  nivelAcceso       String    @default("completo") // completo, limitado
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("administradores")
+}
+
+// Modelo de Especialidad
+model Especialidad {
+  id                String    @id @default(uuid())
+  nombre            String    @unique
+  descripcion       String?
+  activa            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  medicos           Medico[]
+  turnos            Turno[]
+
+  @@map("especialidades")
+}
+
+// Modelo de Turno
+model Turno {
+  id                String    @id @default(uuid())
+  pacienteId        String
+  medicoId          String
+  especialidadId    String
+  fecha             DateTime
+  hora              String    // Formato HH:mm
+  duracion          Int       @default(30) // minutos
+  estado            String    @default("PENDIENTE") // PENDIENTE, CONFIRMADO, CANCELADO, COMPLETADO, AUSENTE
+  motivoConsulta    String?
+  observaciones     String?
+  creadoPorId       String?   // Usuario que creó el turno (puede ser secretario o paciente)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  paciente          Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  medico            Medico    @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+  especialidad      Especialidad @relation(fields: [especialidadId], references: [id])
+  creadoPor         Usuario?  @relation("TurnosCreadosPor", fields: [creadoPorId], references: [id])
+
+  @@index([pacienteId])
+  @@index([medicoId])
+  @@index([fecha])
+  @@index([estado])
+  @@map("turnos")
+}
+
+// Modelo de Disponibilidad del Médico
+model Disponibilidad {
+  id                String    @id @default(uuid())
+  medicoId          String
+  diaSemana         Int       // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  horaInicio        String    // Formato HH:mm
+  horaFin           String    // Formato HH:mm
+  duracionTurno     Int       @default(30) // minutos
+  activa            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  medico            Medico    @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@unique([medicoId, diaSemana, horaInicio])
+  @@index([medicoId])
+  @@map("disponibilidades")
+}
+
+// Modelo de Excepción de Disponibilidad (días específicos sin disponibilidad)
+model ExcepcionDisponibilidad {
+  id                String    @id @default(uuid())
+  medicoId          String
+  fecha             DateTime  @date
+  motivo            String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  medico            Medico    @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@unique([medicoId, fecha])
+  @@index([medicoId])
+  @@index([fecha])
+  @@map("excepciones_disponibilidad")
+}
+
+// Modelo de Nota Médica
+model NotaMedica {
+  id                String    @id @default(uuid())
+  pacienteId        String
+  medicoId          String
+  turnoId           String?   // Opcional, puede ser una nota sin turno
+  fecha             DateTime  @default(now())
+  diagnostico       String?
+  tratamiento       String?
+  observaciones     String?
+  archivos          String?   // JSON con URLs de archivos adjuntos
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  paciente         Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  medico           Medico    @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@index([pacienteId])
+  @@index([medicoId])
+  @@index([fecha])
+  @@map("notas_medicas")
+}
+
+// Modelo de Notificación
+model Notificacion {
+  id                String    @id @default(uuid())
+  usuarioId         String
+  tipo              String    // TURNO_CONFIRMADO, TURNO_CANCELADO, RECORDATORIO, etc.
+  titulo            String
+  mensaje           String
+  leida             Boolean   @default(false)
+  fecha             DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+
+  usuario           Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([leida])
+  @@map("notificaciones")
+}
+
+// Modelo de Configuración del Sistema
+model Configuracion {
+  id                String    @id @default(uuid())
+  clave             String    @unique
+  valor             String
+  descripcion       String?
+  tipo              String    @default("string") // string, number, boolean, json
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("configuraciones")
+}
+
