@@ -7,12 +7,20 @@ import { StorageManager } from './storage.js';
 
 export class AuthManager {
     static login(email, password) {
+        // Asegurar que los datos estén inicializados
+        StorageManager.init();
+        
         const users = StorageManager.get(CONFIG.STORAGE.USERS) || [];
-        const user = users.find(u => 
-            u.email === email && 
-            u.password === password && 
-            u.activo !== false
-        );
+        
+        // Normalizar email (trim y lowercase)
+        const normalizedEmail = email.trim().toLowerCase();
+        
+        const user = users.find(u => {
+            const userEmail = (u.email || '').trim().toLowerCase();
+            return userEmail === normalizedEmail && 
+                   u.password === password && 
+                   u.activo !== false;
+        });
 
         if (user) {
             // Remover password antes de guardar

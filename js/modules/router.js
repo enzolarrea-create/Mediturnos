@@ -67,16 +67,20 @@ export class Router {
     }
 
     static redirectByRole(rol) {
-        const roleRoutes = {
-            [CONFIG.ROLES.ADMIN]: '/admin',
-            [CONFIG.ROLES.SECRETARIO]: '/secretario',
-            [CONFIG.ROLES.MEDICO]: '/medico',
-            [CONFIG.ROLES.PACIENTE]: '/paciente'
+        // Mapeo de roles a carpetas de vistas
+        const roleToFolder = {
+            [CONFIG.ROLES.ADMIN]: 'admin',
+            [CONFIG.ROLES.SECRETARIO]: 'secretario',
+            [CONFIG.ROLES.MEDICO]: 'medico',
+            [CONFIG.ROLES.PACIENTE]: 'paciente'
         };
 
-        const route = roleRoutes[rol];
-        if (route) {
-            window.location.href = `views/${rol}/dashboard.html`;
+        const folder = roleToFolder[rol];
+        if (folder) {
+            window.location.href = `views/${folder}/dashboard.html`;
+        } else {
+            console.error('Rol no reconocido:', rol);
+            window.location.href = 'landing.html';
         }
     }
 

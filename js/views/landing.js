@@ -5,10 +5,13 @@
 import { AuthManager } from '../modules/auth.js';
 import { NotificationManager } from '../modules/notifications.js';
 import { Router } from '../modules/router.js';
+import { StorageManager } from '../modules/storage.js';
 import { FormValidator } from '../components/form.js';
 
 class LandingView {
     constructor() {
+        // Asegurar inicialización de storage antes de todo
+        StorageManager.init();
         this.init();
     }
 
@@ -93,8 +96,24 @@ class LandingView {
     }
 
     async handleLogin(form) {
-        const email = form.querySelector('[name="email"]').value;
-        const password = form.querySelector('[name="password"]').value;
+        const emailInput = form.querySelector('[name="email"]');
+        const passwordInput = form.querySelector('[name="password"]');
+        
+        if (!emailInput || !passwordInput) {
+            NotificationManager.error('Error: No se encontraron los campos del formulario');
+            return;
+        }
+
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!email || !password) {
+            NotificationManager.error('Por favor completa todos los campos');
+            return;
+        }
+
+        // Asegurar inicialización antes del login
+        StorageManager.init();
 
         const result = AuthManager.login(email, password);
 
@@ -105,6 +124,8 @@ class LandingView {
             }, 500);
         } else {
             NotificationManager.error(result.message || 'Error al iniciar sesión');
+            // Mostrar ayuda adicional
+            console.error('Error de login. Usuarios disponibles:', StorageManager.get('mediturnos_users'));
         }
     }
 
@@ -158,8 +179,16 @@ class LandingView {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         new LandingView();
+        // Cargar utilidades de debug
+        import('../utils/debug.js').then(() => {
+            console.log('Utilidades de debug cargadas. Usa checkStorage() o reinitStorage() en la consola.');
+        });
     });
 } else {
     new LandingView();
+    // Cargar utilidades de debug
+    import('../utils/debug.js').then(() => {
+        console.log('Utilidades de debug cargadas. Usa checkStorage() o reinitStorage() en la consola.');
+    });
 }
 

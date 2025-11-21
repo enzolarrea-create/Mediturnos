@@ -15,8 +15,13 @@ class MediTurnosApp {
     }
 
     init() {
-        // Inicializar storage
-        StorageManager.init();
+        // Inicializar storage PRIMERO - esto es crítico
+        try {
+            StorageManager.init();
+            console.log('Storage inicializado correctamente');
+        } catch (e) {
+            console.error('Error al inicializar storage:', e);
+        }
 
         // Inicializar notificaciones
         NotificationManager.init();

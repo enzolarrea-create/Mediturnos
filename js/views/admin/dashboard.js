@@ -366,14 +366,37 @@ class AdminDashboard {
         document.getElementById('newAppointmentBtn')?.addEventListener('click', () => this.openAppointmentModal());
         document.getElementById('addAppointmentBtn2')?.addEventListener('click', () => this.openAppointmentModal());
 
+        // Botones nuevo paciente
+        document.getElementById('addPacienteBtn')?.addEventListener('click', async () => {
+            if (!window.ModalManager) {
+                const { ModalManager } = await import('../../components/modals.js');
+                window.ModalManager = ModalManager;
+            }
+            await window.ModalManager.openPacienteModal();
+        });
+
+        // Botones nuevo médico
+        document.getElementById('addMedicoBtn')?.addEventListener('click', async () => {
+            if (!window.ModalManager) {
+                const { ModalManager } = await import('../../components/modals.js');
+                window.ModalManager = ModalManager;
+            }
+            await window.ModalManager.openMedicoModal();
+        });
+
+        // Botones nuevo usuario
+        document.getElementById('addUsuarioBtn')?.addEventListener('click', async () => {
+            if (!window.ModalManager) {
+                const { ModalManager } = await import('../../components/modals.js');
+                window.ModalManager = ModalManager;
+            }
+            await window.ModalManager.openUsuarioModal();
+        });
+
         // Filtros
         document.getElementById('filter-fecha')?.addEventListener('change', () => this.applyFilters());
         document.getElementById('filter-medico')?.addEventListener('change', () => this.applyFilters());
         document.getElementById('filter-estado')?.addEventListener('change', () => this.applyFilters());
-
-        // Modal
-        document.querySelector('.modal-close')?.addEventListener('click', () => this.closeAppointmentModal());
-        document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.closeAppointmentModal());
     }
 
     applyFilters() {
@@ -392,123 +415,115 @@ class AdminDashboard {
         this.renderTurnosTable(turnos, medicos, pacientes);
     }
 
-    openAppointmentModal() {
-        const modal = document.getElementById('appointmentModal');
-        if (!modal) return;
-
-        const pacientes = PacientesManager.getAll({ activo: true });
-        const medicos = MedicosManager.getAll({ activo: true });
-
-        // Llenar selects
-        const pacienteSelect = modal.querySelector('[name="pacienteId"]');
-        if (pacienteSelect) {
-            pacienteSelect.innerHTML = '<option value="">Seleccionar paciente</option>' +
-                pacientes.map(p => `<option value="${p.id}">${p.nombre} ${p.apellido}</option>`).join('');
+    async openAppointmentModal() {
+        if (!window.ModalManager) {
+            const { ModalManager } = await import('../../components/modals.js');
+            window.ModalManager = ModalManager;
         }
-
-        const medicoSelect = modal.querySelector('[name="medicoId"]');
-        if (medicoSelect) {
-            medicoSelect.innerHTML = '<option value="">Seleccionar médico</option>' +
-                medicos.map(m => `<option value="${m.id}">${m.nombre} - ${m.especialidad}</option>`).join('');
-        }
-
-        const horaSelect = modal.querySelector('[name="hora"]');
-        if (horaSelect) {
-            horaSelect.innerHTML = '<option value="">Seleccionar hora</option>' +
-                CONFIG.HORARIOS.map(h => `<option value="${h}">${h}</option>`).join('');
-        }
-
-        const fechaInput = modal.querySelector('[name="fecha"]');
-        if (fechaInput) {
-            fechaInput.value = new Date().toISOString().split('T')[0];
-        }
-
-        modal.classList.add('active');
-        document.body.classList.add('modal-open');
-    }
-
-    closeAppointmentModal() {
-        const modal = document.getElementById('appointmentModal');
-        if (modal) {
-            modal.classList.remove('active');
-            document.body.classList.remove('modal-open');
-            modal.querySelector('form').reset();
-        }
+        await window.ModalManager.openTurnoModal();
     }
 }
 
 // Funciones globales
-window.logout = function() {
-    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-        AuthManager.logout();
-        window.location.href = '../../landing.html';
+window.logout = async function() {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
     }
-};
-
-window.saveAppointment = function() {
-    const form = document.getElementById('appointmentForm');
-    const formData = new FormData(form);
-    
-    const turnoData = {
-        pacienteId: formData.get('pacienteId'),
-        medicoId: formData.get('medicoId'),
-        fecha: formData.get('fecha'),
-        hora: formData.get('hora'),
-        motivo: formData.get('motivo')
-    };
-
-    const result = TurnosManager.create(turnoData);
-    
-    if (result.success) {
-        NotificationManager.success('Turno creado exitosamente');
-        dashboard.closeAppointmentModal();
-        dashboard.loadTurnos();
-        dashboard.loadDashboard();
-    } else {
-        NotificationManager.error(result.message);
-    }
-};
-
-window.closeAppointmentModal = function() {
-    dashboard.closeAppointmentModal();
-};
-
-window.editTurno = function(id) {
-    NotificationManager.info('Función de edición en desarrollo');
-};
-
-window.cancelTurno = function(id) {
-    if (confirm('¿Estás seguro de cancelar este turno?')) {
-        const result = TurnosManager.cancel(id);
-        if (result.success) {
-            NotificationManager.success('Turno cancelado');
-            dashboard.loadTurnos();
-            dashboard.loadDashboard();
+    await window.ModalManager.confirm(
+        'Cerrar Sesión',
+        '¿Estás seguro de que deseas cerrar sesión?',
+        () => {
+            AuthManager.logout();
+            window.location.href = '../../landing.html';
         }
+    );
+};
+
+// Funciones movidas a ModalManager
+
+window.editTurno = async function(id) {
+    const turno = TurnosManager.getById(id);
+    if (!turno) {
+        NotificationManager.error('Turno no encontrado');
+        return;
     }
-};
-
-window.editPaciente = function(id) {
-    NotificationManager.info('Función de edición en desarrollo');
-};
-
-window.verHistorial = function(id) {
-    const historial = PacientesManager.getHistorial(id);
-    if (historial.length === 0) {
-        NotificationManager.info('No hay historial para este paciente');
-    } else {
-        alert(`Historial: ${historial.length} turnos`);
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
     }
+    await window.ModalManager.openTurnoModal(turno);
 };
 
-window.editMedico = function(id) {
-    NotificationManager.info('Función de edición en desarrollo');
+window.cancelTurno = async function(id) {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.confirm(
+        'Cancelar Turno',
+        '¿Estás seguro de que deseas cancelar este turno? Esta acción no se puede deshacer.',
+        () => {
+            const result = TurnosManager.cancel(id);
+            if (result.success) {
+                NotificationManager.success('Turno cancelado exitosamente');
+                dashboard.loadTurnos();
+                dashboard.loadDashboard();
+            } else {
+                NotificationManager.error(result.message || 'Error al cancelar el turno');
+            }
+        }
+    );
 };
 
-window.editUsuario = function(id) {
-    NotificationManager.info('Función de edición en desarrollo');
+window.editPaciente = async function(id) {
+    const paciente = PacientesManager.getById(id);
+    if (!paciente) {
+        NotificationManager.error('Paciente no encontrado');
+        return;
+    }
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openPacienteModal(paciente);
+};
+
+window.verHistorial = async function(id) {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openHistorialModal(id);
+};
+
+window.editMedico = async function(id) {
+    const medico = MedicosManager.getById(id);
+    if (!medico) {
+        NotificationManager.error('Médico no encontrado');
+        return;
+    }
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openMedicoModal(medico);
+};
+
+window.editUsuario = async function(id) {
+    const usuario = UsuariosManager.getById(id);
+    if (!usuario) {
+        NotificationManager.error('Usuario no encontrado');
+        return;
+    }
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openUsuarioModal(usuario);
 };
 
 // Inicializar
 const dashboard = new AdminDashboard();
+window.dashboard = dashboard; // Hacer disponible globalmente para recargas
 

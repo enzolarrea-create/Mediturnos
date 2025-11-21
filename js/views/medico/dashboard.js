@@ -149,32 +149,53 @@ class MedicoDashboard {
     }
 }
 
-window.logout = () => {
-    if (confirm('¿Cerrar sesión?')) {
-        AuthManager.logout();
-        window.location.href = '../../landing.html';
+window.logout = async function() {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
     }
+    await window.ModalManager.confirm(
+        'Cerrar Sesión',
+        '¿Estás seguro de que deseas cerrar sesión?',
+        () => {
+            AuthManager.logout();
+            window.location.href = '../../landing.html';
+        }
+    );
 };
 
-window.cambiarEstado = (id) => {
-    const estados = ['pendiente', 'confirmado', 'en_curso', 'completado', 'no_asistio'];
-    const estadoActual = TurnosManager.getById(id)?.estado;
-    const nuevoEstado = prompt('Nuevo estado:', estadoActual);
-    if (nuevoEstado && estados.includes(nuevoEstado)) {
-        TurnosManager.update(id, { estado: nuevoEstado });
-        NotificationManager.success('Estado actualizado');
-        new MedicoDashboard().loadDashboard();
+window.cambiarEstado = async function(id) {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
     }
+    await window.ModalManager.openEstadoTurnoModal(id);
 };
 
-window.verHistorial = (id) => {
-    const historial = PacientesManager.getHistorial(id);
-    alert(`Historial: ${historial.length} turnos`);
+window.verHistorial = async function(id) {
+    const { ModalManager } = await import('../../components/modals.js');
+    await ModalManager.openHistorialModal(id);
 };
 
-window.editarDisponibilidad = () => {
-    NotificationManager.info('Función en desarrollo');
+window.editarDisponibilidad = async function() {
+    const { ModalManager } = await import('../../components/modals.js');
+    const { MedicosManager } = await import('../../modules/medicos.js');
+    
+    const user = AuthManager.getCurrentUser();
+    if (!user || !user.medicoId) {
+        NotificationManager.error('No se encontró información del médico');
+        return;
+    }
+    
+    const medico = MedicosManager.getById(user.medicoId);
+    if (!medico) {
+        NotificationManager.error('Médico no encontrado');
+        return;
+    }
+    
+    await ModalManager.openMedicoModal(medico);
 };
 
-new MedicoDashboard();
+const medicoDashboard = new MedicoDashboard();
+window.dashboard = medicoDashboard; // Hacer disponible globalmente
 

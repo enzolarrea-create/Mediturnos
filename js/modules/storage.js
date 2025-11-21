@@ -180,8 +180,13 @@ export class StorageManager {
     }
 
     static get(key) {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
+        try {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            console.error('Error al leer de localStorage:', e);
+            return null;
+        }
     }
 
     static set(key, value) {

@@ -19,6 +19,13 @@ class SecretarioDashboard {
         this.loadDashboard();
         document.getElementById('newAppointmentBtn')?.addEventListener('click', () => this.openAppointmentModal());
         document.getElementById('addAppointmentBtn2')?.addEventListener('click', () => this.openAppointmentModal());
+        document.getElementById('addPacienteBtn')?.addEventListener('click', async () => {
+            if (!window.ModalManager) {
+                const { ModalManager } = await import('../../components/modals.js');
+                window.ModalManager = ModalManager;
+            }
+            await window.ModalManager.openPacienteModal();
+        });
     }
 
     setupNavigation() {
@@ -127,27 +134,75 @@ class SecretarioDashboard {
         </div>`;
     }
 
-    openAppointmentModal() {
-        NotificationManager.info('Modal de turno - Funcionalidad completa en desarrollo');
+    async openAppointmentModal() {
+        // Asegurar que ModalManager esté disponible
+        if (!window.ModalManager) {
+            const { ModalManager } = await import('../../components/modals.js');
+            window.ModalManager = ModalManager;
+        }
+        await window.ModalManager.openTurnoModal();
     }
 }
 
-window.logout = () => {
-    if (confirm('¿Cerrar sesión?')) {
-        AuthManager.logout();
-        window.location.href = '../../landing.html';
+window.logout = async function() {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
     }
+    await window.ModalManager.confirm(
+        'Cerrar Sesión',
+        '¿Estás seguro de que deseas cerrar sesión?',
+        () => {
+            AuthManager.logout();
+            window.location.href = '../../landing.html';
+        }
+    );
 };
 
-window.editTurno = (id) => NotificationManager.info('Editar turno');
-window.cancelTurno = (id) => {
-    if (confirm('¿Cancelar turno?')) {
-        TurnosManager.cancel(id);
-        NotificationManager.success('Turno cancelado');
-        new SecretarioDashboard().loadTurnos();
+window.editTurno = async function(id) {
+    const turno = TurnosManager.getById(id);
+    if (!turno) {
+        NotificationManager.error('Turno no encontrado');
+        return;
     }
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openTurnoModal(turno);
 };
-window.nuevoTurnoPaciente = (id) => NotificationManager.info('Nuevo turno para paciente');
 
-new SecretarioDashboard();
+window.cancelTurno = async function(id) {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.confirm(
+        'Cancelar Turno',
+        '¿Estás seguro de que deseas cancelar este turno?',
+        () => {
+            const result = TurnosManager.cancel(id);
+            if (result.success) {
+                NotificationManager.success('Turno cancelado exitosamente');
+                if (window.dashboard) {
+                    window.dashboard.loadTurnos();
+                    window.dashboard.loadDashboard();
+                } else {
+                    new SecretarioDashboard().loadTurnos();
+                }
+            }
+        }
+    );
+};
+
+window.nuevoTurnoPaciente = async function(id) {
+    if (!window.ModalManager) {
+        const { ModalManager } = await import('../../components/modals.js');
+        window.ModalManager = ModalManager;
+    }
+    await window.ModalManager.openTurnoModal(null, id);
+};
+
+const secretarioDashboard = new SecretarioDashboard();
+window.dashboard = secretarioDashboard; // Hacer disponible globalmente
 
