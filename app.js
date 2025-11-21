@@ -122,36 +122,241 @@ function handleLogin(event) {
     }
 }
 
+// ============================================
+// FORMATEO AUTOMÁTICO DE DNI Y FECHA
+// ============================================
+
+/**
+ * Formatea el DNI mientras el usuario escribe
+ * Formato: xx.xxx.xxx (ej: 12.345.678)
+ */
+function formatDNI(input) {
+    // Guardar posición del cursor
+    const cursorPosition = input.selectionStart;
+    
+    // Obtener solo números
+    let value = input.value.replace(/\D/g, '');
+    
+    // Limitar a 8 dígitos
+    if (value.length > 8) {
+        value = value.substring(0, 8);
+    }
+    
+    // Aplicar formato: xx.xxx.xxx
+    let formatted = '';
+    if (value.length > 0) {
+        if (value.length <= 2) {
+            formatted = value;
+        } else if (value.length <= 5) {
+            formatted = value.substring(0, 2) + '.' + value.substring(2);
+        } else {
+            formatted = value.substring(0, 2) + '.' + value.substring(2, 5) + '.' + value.substring(5);
+        }
+    }
+    
+    input.value = formatted;
+    
+    // Restaurar posición del cursor (ajustada por los puntos agregados)
+    let newCursorPosition = cursorPosition;
+    const beforeCursor = input.value.substring(0, cursorPosition).replace(/\D/g, '').length;
+    const formattedBeforeCursor = formatDNIValue(beforeCursor);
+    newCursorPosition = formattedBeforeCursor.length;
+    
+    input.setSelectionRange(newCursorPosition, newCursorPosition);
+}
+
+/**
+ * Función auxiliar para formatear DNI sin modificar el input
+ */
+function formatDNIValue(value) {
+    const numbers = value.replace(/\D/g, '').substring(0, 8);
+    if (numbers.length <= 2) {
+        return numbers;
+    } else if (numbers.length <= 5) {
+        return numbers.substring(0, 2) + '.' + numbers.substring(2);
+    } else {
+        return numbers.substring(0, 2) + '.' + numbers.substring(2, 5) + '.' + numbers.substring(5);
+    }
+}
+
+/**
+ * Formatea la fecha de nacimiento mientras el usuario escribe
+ * Formato: dd/mm/yyyy (ej: 01/06/2005)
+ */
+function formatFecha(input) {
+    // Guardar posición del cursor
+    const cursorPosition = input.selectionStart;
+    
+    // Obtener solo números
+    let value = input.value.replace(/\D/g, '');
+    
+    // Limitar a 8 dígitos (ddmmyyyy)
+    if (value.length > 8) {
+        value = value.substring(0, 8);
+    }
+    
+    // Aplicar formato: dd/mm/yyyy
+    let formatted = '';
+    if (value.length > 0) {
+        if (value.length <= 2) {
+            formatted = value;
+        } else if (value.length <= 4) {
+            formatted = value.substring(0, 2) + '/' + value.substring(2);
+        } else {
+            formatted = value.substring(0, 2) + '/' + value.substring(2, 4) + '/' + value.substring(4);
+        }
+    }
+    
+    input.value = formatted;
+    
+    // Restaurar posición del cursor (ajustada por las barras agregadas)
+    let newCursorPosition = cursorPosition;
+    const beforeCursor = input.value.substring(0, cursorPosition).replace(/\D/g, '').length;
+    const formattedBeforeCursor = formatFechaValue(beforeCursor);
+    newCursorPosition = formattedBeforeCursor.length;
+    
+    input.setSelectionRange(newCursorPosition, newCursorPosition);
+}
+
+/**
+ * Función auxiliar para formatear fecha sin modificar el input
+ */
+function formatFechaValue(value) {
+    const numbers = value.replace(/\D/g, '').substring(0, 8);
+    if (numbers.length <= 2) {
+        return numbers;
+    } else if (numbers.length <= 4) {
+        return numbers.substring(0, 2) + '/' + numbers.substring(2);
+    } else {
+        return numbers.substring(0, 2) + '/' + numbers.substring(2, 4) + '/' + numbers.substring(4);
+    }
+}
+
+/**
+ * Valida que la fecha sea real y válida
+ */
+function validateFecha(fechaStr) {
+    // Formato esperado: dd/mm/yyyy
+    const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const match = fechaStr.match(regex);
+    
+    if (!match) {
+        return false;
+    }
+    
+    const dia = parseInt(match[1], 10);
+    const mes = parseInt(match[2], 10);
+    const anio = parseInt(match[3], 10);
+    
+    // Validar rango de año (1900 - año actual)
+    const anioActual = new Date().getFullYear();
+    if (anio < 1900 || anio > anioActual) {
+        return false;
+    }
+    
+    // Validar mes
+    if (mes < 1 || mes > 12) {
+        return false;
+    }
+    
+    // Validar día según el mes
+    const diasPorMes = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    
+    // Año bisiesto
+    if (mes === 2 && ((anio % 4 === 0 && anio % 100 !== 0) || (anio % 400 === 0))) {
+        if (dia < 1 || dia > 29) {
+            return false;
+        }
+    } else {
+        if (dia < 1 || dia > diasPorMes[mes - 1]) {
+            return false;
+        }
+    }
+    
+    // Validar que no sea una fecha futura
+    const fecha = new Date(anio, mes - 1, dia);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    
+    if (fecha > hoy) {
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * Valida que el DNI tenga el formato correcto
+ */
+function validateDNI(dniStr) {
+    // Formato esperado: xx.xxx.xxx
+    const regex = /^\d{2}\.\d{3}\.\d{3}$/;
+    return regex.test(dniStr);
+}
+
 // Manejar registro
 function handleRegister(event) {
     event.preventDefault();
     
-    const nombre = document.getElementById('regNombre').value;
-    const apellido = document.getElementById('regApellido').value;
-    const dni = document.getElementById('regDNI').value;
-    const fechaNacimiento = document.getElementById('regFecha').value;
-    const email = document.getElementById('regEmail').value;
+    const nombre = document.getElementById('regNombre').value.trim();
+    const apellido = document.getElementById('regApellido').value.trim();
+    const dni = document.getElementById('regDNI').value.trim();
+    const fechaNacimiento = document.getElementById('regFecha').value.trim();
+    const email = document.getElementById('regEmail').value.trim().toLowerCase();
     const password = document.getElementById('regPassword').value;
     const confirmPassword = document.getElementById('regConfirmPassword').value;
 
-    // Validaciones
+    // Validar campos vacíos
+    if (!nombre || !apellido || !dni || !fechaNacimiento || !email || !password) {
+        alert('Por favor completa todos los campos requeridos');
+        return;
+    }
+
+    // Validar DNI
+    if (!validateDNI(dni)) {
+        alert('El DNI debe tener el formato: 12.345.678');
+        document.getElementById('regDNI').focus();
+        return;
+    }
+
+    // Validar fecha
+    if (!validateFecha(fechaNacimiento)) {
+        alert('La fecha de nacimiento no es válida. Verifica que sea una fecha real y no sea futura.');
+        document.getElementById('regFecha').focus();
+        return;
+    }
+
+    // Validar contraseñas
     if (password !== confirmPassword) {
         alert('Las contraseñas no coinciden');
+        document.getElementById('regConfirmPassword').focus();
         return;
     }
 
     if (password.length < 8) {
         alert('La contraseña debe tener al menos 8 caracteres');
+        document.getElementById('regPassword').focus();
         return;
     }
 
+    // Validar formato de contraseña (al menos 1 mayúscula y 1 número)
+    const passwordRegex = /(?=.*[A-Z])(?=.*\d)/;
+    if (!passwordRegex.test(password)) {
+        alert('La contraseña debe contener al menos una mayúscula y un número');
+        document.getElementById('regPassword').focus();
+        return;
+    }
+
+    // Validar email único
     const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
     
-    if (users.find(u => u.email === email)) {
+    if (users.find(u => u.email.toLowerCase() === email)) {
         alert('Este email ya está registrado');
+        document.getElementById('regEmail').focus();
         return;
     }
 
+    // Crear nuevo usuario
     const newUser = {
         id: Date.now(),
         nombre,
@@ -965,6 +1170,66 @@ document.addEventListener('DOMContentLoaded', () => {
         const registerForm = document.getElementById('registerForm');
         if (registerForm) {
             registerForm.addEventListener('submit', handleRegister);
+        }
+
+        // Formateo automático de DNI
+        const dniInput = document.getElementById('regDNI');
+        if (dniInput) {
+            dniInput.addEventListener('input', (e) => {
+                formatDNI(e.target);
+            });
+            
+            // Prevenir pegar texto no numérico
+            dniInput.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const paste = (e.clipboardData || window.clipboardData).getData('text');
+                const numbers = paste.replace(/\D/g, '').substring(0, 8);
+                e.target.value = '';
+                e.target.focus();
+                // Simular escritura para aplicar formato
+                numbers.split('').forEach((char, index) => {
+                    setTimeout(() => {
+                        e.target.value += char;
+                        formatDNI(e.target);
+                    }, index * 10);
+                });
+            });
+        }
+
+        // Formateo automático de Fecha
+        const fechaInput = document.getElementById('regFecha');
+        if (fechaInput) {
+            fechaInput.addEventListener('input', (e) => {
+                formatFecha(e.target);
+            });
+            
+            // Validar fecha al perder el foco
+            fechaInput.addEventListener('blur', (e) => {
+                const fecha = e.target.value.trim();
+                if (fecha && !validateFecha(fecha)) {
+                    e.target.style.borderColor = 'var(--error)';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                } else {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = '';
+                }
+            });
+            
+            // Prevenir pegar texto no numérico
+            fechaInput.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const paste = (e.clipboardData || window.clipboardData).getData('text');
+                const numbers = paste.replace(/\D/g, '').substring(0, 8);
+                e.target.value = '';
+                e.target.focus();
+                // Simular escritura para aplicar formato
+                numbers.split('').forEach((char, index) => {
+                    setTimeout(() => {
+                        e.target.value += char;
+                        formatFecha(e.target);
+                    }, index * 10);
+                });
+            });
         }
 
         // Cerrar modales al hacer clic fuera
