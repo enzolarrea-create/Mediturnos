@@ -74,6 +74,7 @@ model Medico {
   especialidad      Especialidad @relation(fields: [especialidadId], references: [id])
   turnos            Turno[]
   disponibilidades  Disponibilidad[]
+  excepcionesDisponibilidad ExcepcionDisponibilidad[]
   notasMedicas      NotaMedica[]
 
   @@index([especialidadId])
@@ -172,7 +173,7 @@ model Disponibilidad {
 model ExcepcionDisponibilidad {
   id                String    @id @default(uuid())
   medicoId          String
-  fecha             DateTime  @date
+  fecha             DateTime
   motivo            String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
