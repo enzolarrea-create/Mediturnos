@@ -1,59 +1,28 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../server.js';
 
 /**
  * Obtener notificaciones del usuario actual
  */
-export const getNotificaciones = async (req, res, next) => {
+export const obtenerNotificaciones = async (req, res, next) => {
   try {
-    const { leida, page = 1, limit = 20 } = req.query;
+    const { leida } = req.query;
+    const { id: userId } = req.user;
 
-    const where = { usuarioId: req.userId };
+    const where = { usuarioId: userId };
 
     if (leida !== undefined) {
       where.leida = leida === 'true';
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [notificaciones, total] = await Promise.all([
-      prisma.notificacion.findMany({
-        where,
-        orderBy: { fecha: 'desc' },
-        skip,
-        take: parseInt(limit)
-      }),
-      prisma.notificacion.count({ where })
-    ]);
-
-    res.json({
-      notificaciones,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit))
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener conteo de notificaciones no leídas
- */
-export const getUnreadCount = async (req, res, next) => {
-  try {
-    const count = await prisma.notificacion.count({
-      where: {
-        usuarioId: req.userId,
-        leida: false
-      }
+    const notificaciones = await prisma.notificacion.findMany({
+      where,
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 50 // Limitar a las últimas 50
     });
 
-    res.json({ count });
+    res.json({ notificaciones });
   } catch (error) {
     next(error);
   }
@@ -62,9 +31,10 @@ export const getUnreadCount = async (req, res, next) => {
 /**
  * Marcar notificación como leída
  */
-export const markAsRead = async (req, res, next) => {
+export const marcarComoLeida = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { id: userId } = req.user;
 
     const notificacion = await prisma.notificacion.findUnique({
       where: { id }
@@ -74,9 +44,10 @@ export const markAsRead = async (req, res, next) => {
       return res.status(404).json({ error: 'Notificación no encontrada' });
     }
 
-    // Verificar que pertenece al usuario
-    if (notificacion.usuarioId !== req.userId) {
-      return res.status(403).json({ error: 'No tienes permisos para esta notificación' });
+    if (notificacion.usuarioId !== userId) {
+      return res.status(403).json({
+        error: 'No tienes permisos para modificar esta notificación'
+      });
     }
 
     const notificacionActualizada = await prisma.notificacion.update({
@@ -96,11 +67,13 @@ export const markAsRead = async (req, res, next) => {
 /**
  * Marcar todas las notificaciones como leídas
  */
-export const markAllAsRead = async (req, res, next) => {
+export const marcarTodasComoLeidas = async (req, res, next) => {
   try {
+    const { id: userId } = req.user;
+
     await prisma.notificacion.updateMany({
       where: {
-        usuarioId: req.userId,
+        usuarioId: userId,
         leida: false
       },
       data: {
@@ -108,41 +81,7 @@ export const markAllAsRead = async (req, res, next) => {
       }
     });
 
-    res.json({
-      message: 'Todas las notificaciones han sido marcadas como leídas'
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Eliminar notificación
- */
-export const deleteNotificacion = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const notificacion = await prisma.notificacion.findUnique({
-      where: { id }
-    });
-
-    if (!notificacion) {
-      return res.status(404).json({ error: 'Notificación no encontrada' });
-    }
-
-    // Verificar que pertenece al usuario
-    if (notificacion.usuarioId !== req.userId) {
-      return res.status(403).json({ error: 'No tienes permisos para eliminar esta notificación' });
-    }
-
-    await prisma.notificacion.delete({
-      where: { id }
-    });
-
-    res.json({
-      message: 'Notificación eliminada exitosamente'
-    });
+    res.json({ message: 'Todas las notificaciones fueron marcadas como leídas' });
   } catch (error) {
     next(error);
   }

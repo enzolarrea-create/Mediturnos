@@ -1,18 +1,23 @@
 import express from 'express';
-import * as medicoController from '../controllers/medico.controller.js';
-import { authenticateToken, requireRole } from '../middlewares/auth.middleware.js';
+import {
+  listarMedicos,
+  obtenerMedico,
+  crearMedico,
+  actualizarMedico,
+  eliminarMedico
+} from '../controllers/medico.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
-// Todas las rutas requieren autenticación
-router.use(authenticateToken);
+// Rutas públicas (para búsqueda de médicos)
+router.get('/', listarMedicos);
+router.get('/:id', obtenerMedico);
 
-// Rutas
-router.get('/', requireRole('ADMINISTRADOR', 'SECRETARIO'), medicoController.getMedicos);
-router.get('/me', requireRole('MEDICO'), medicoController.getMiPerfil);
-router.get('/:id', requireRole('ADMINISTRADOR', 'SECRETARIO', 'MEDICO'), medicoController.getMedicoById);
-router.get('/:id/turnos', requireRole('ADMINISTRADOR', 'SECRETARIO', 'MEDICO'), medicoController.getTurnosMedico);
-router.get('/:id/disponibilidad', requireRole('ADMINISTRADOR', 'SECRETARIO', 'MEDICO'), medicoController.getDisponibilidadMedico);
+// Rutas protegidas para Admin
+router.post('/', authenticate, authorize('ADMINISTRADOR'), crearMedico);
+router.put('/:id', authenticate, authorize('ADMINISTRADOR'), actualizarMedico);
+router.delete('/:id', authenticate, authorize('ADMINISTRADOR'), eliminarMedico);
 
 export default router;
 

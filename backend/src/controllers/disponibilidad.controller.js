@@ -1,24 +1,16 @@
-import { PrismaClient } from '@prisma/client';
-import { validationResult } from 'express-validator';
-
-const prisma = new PrismaClient();
+import { prisma } from '../server.js';
 
 /**
  * Obtener disponibilidad de un médico
  */
-export const getDisponibilidadMedico = async (req, res, next) => {
+export const obtenerDisponibilidad = async (req, res, next) => {
   try {
     const { medicoId } = req.params;
 
-    // Verificar permisos: solo el médico, secretario o admin pueden ver
-    if (req.userRole === 'MEDICO' && req.user.medico?.id !== medicoId) {
-      return res.status(403).json({ error: 'No tienes permisos para ver esta disponibilidad' });
-    }
-
-    const disponibilidad = await prisma.disponibilidad.findMany({
+    const disponibilidades = await prisma.disponibilidad.findMany({
       where: {
         medicoId,
-        activa: true
+        activo: true
       },
       orderBy: [
         { diaSemana: 'asc' },
@@ -26,46 +18,91 @@ export const getDisponibilidadMedico = async (req, res, next) => {
       ]
     });
 
-    res.json({ disponibilidad });
+    res.json({ disponibilidades });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Crear disponibilidad
+ * Crear disponibilidad (Médico)
  */
-export const createDisponibilidad = async (req, res, next) => {
+export const crearDisponibilidad = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    const { medicoId, diaSemana, horaInicio, horaFin } = req.body;
+    const { rol, id: userId } = req.user;
+
+    // Verificar que el médico existe
+    const medico = await prisma.medico.findUnique({
+      where: { id: medicoId }
+    });
+
+    if (!medico) {
+      return res.status(404).json({ error: 'Médico no encontrado' });
     }
 
-    const { medicoId, diaSemana, horaInicio, horaFin, duracionTurno = 30 } = req.body;
-
-    // Verificar permisos
-    if (req.userRole === 'MEDICO' && req.user.medico?.id !== medicoId) {
-      return res.status(403).json({ error: 'No tienes permisos para crear esta disponibilidad' });
+    // Solo el médico puede gestionar su propia disponibilidad
+    if (rol === 'MEDICO' && medico.usuarioId !== userId) {
+      return res.status(403).json({
+        error: 'Solo puedes gestionar tu propia disponibilidad'
+      });
     }
 
-    // Verificar que la hora de inicio sea menor que la de fin
-    const [horaInicioH, horaInicioM] = horaInicio.split(':').map(Number);
-    const [horaFinH, horaFinM] = horaFin.split(':').map(Number);
-    const inicioMinutos = horaInicioH * 60 + horaInicioM;
-    const finMinutos = horaFinH * 60 + horaFinM;
+    // Validaciones
+    if (diaSemana < 0 || diaSemana > 6) {
+      return res.status(400).json({
+        error: 'Día de la semana debe estar entre 0 (Domingo) y 6 (Sábado)'
+      });
+    }
 
-    if (inicioMinutos >= finMinutos) {
-      return res.status(400).json({ error: 'La hora de inicio debe ser menor que la hora de fin' });
+    if (!horaInicio || !horaFin) {
+      return res.status(400).json({
+        error: 'Hora de inicio y fin son requeridas'
+      });
+    }
+
+    // Verificar formato de hora (HH:MM)
+    const horaRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!horaRegex.test(horaInicio) || !horaRegex.test(horaFin)) {
+      return res.status(400).json({
+        error: 'Formato de hora inválido. Use HH:MM (ej: 09:00)'
+      });
+    }
+
+    // Verificar que horaInicio < horaFin
+    const [hInicio, mInicio] = horaInicio.split(':').map(Number);
+    const [hFin, mFin] = horaFin.split(':').map(Number);
+    const minutosInicio = hInicio * 60 + mInicio;
+    const minutosFin = hFin * 60 + mFin;
+
+    if (minutosInicio >= minutosFin) {
+      return res.status(400).json({
+        error: 'La hora de inicio debe ser menor que la hora de fin'
+      });
+    }
+
+    // Verificar si ya existe una disponibilidad para ese día
+    const existe = await prisma.disponibilidad.findFirst({
+      where: {
+        medicoId,
+        diaSemana,
+        activo: true
+      }
+    });
+
+    if (existe) {
+      return res.status(409).json({
+        error: 'Ya existe una disponibilidad para ese día. Actualícela en lugar de crear una nueva.'
+      });
     }
 
     const disponibilidad = await prisma.disponibilidad.create({
       data: {
         medicoId,
-        diaSemana: parseInt(diaSemana),
+        diaSemana,
         horaInicio,
         horaFin,
-        duracionTurno: parseInt(duracionTurno)
+        activo: true
       }
     });
 
@@ -79,47 +116,67 @@ export const createDisponibilidad = async (req, res, next) => {
 };
 
 /**
- * Actualizar disponibilidad
+ * Actualizar disponibilidad (Médico)
  */
-export const updateDisponibilidad = async (req, res, next) => {
+export const actualizarDisponibilidad = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { id } = req.params;
-    const { diaSemana, horaInicio, horaFin, duracionTurno, activa } = req.body;
+    const { diaSemana, horaInicio, horaFin, activo } = req.body;
+    const { rol, id: userId } = req.user;
 
-    // Verificar que existe
-    const disponibilidadExistente = await prisma.disponibilidad.findUnique({
-      where: { id }
+    const disponibilidad = await prisma.disponibilidad.findUnique({
+      where: { id },
+      include: { medico: true }
     });
 
-    if (!disponibilidadExistente) {
+    if (!disponibilidad) {
       return res.status(404).json({ error: 'Disponibilidad no encontrada' });
     }
 
-    // Verificar permisos
-    if (req.userRole === 'MEDICO' && req.user.medico?.id !== disponibilidadExistente.medicoId) {
-      return res.status(403).json({ error: 'No tienes permisos para editar esta disponibilidad' });
+    // Solo el médico puede gestionar su propia disponibilidad
+    if (rol === 'MEDICO' && disponibilidad.medico.usuarioId !== userId) {
+      return res.status(403).json({
+        error: 'Solo puedes gestionar tu propia disponibilidad'
+      });
     }
 
-    const dataUpdate = {};
-    if (diaSemana !== undefined) dataUpdate.diaSemana = parseInt(diaSemana);
-    if (horaInicio) dataUpdate.horaInicio = horaInicio;
-    if (horaFin) dataUpdate.horaFin = horaFin;
-    if (duracionTurno !== undefined) dataUpdate.duracionTurno = parseInt(duracionTurno);
-    if (activa !== undefined) dataUpdate.activa = activa;
+    // Validaciones si se actualizan horas
+    if (horaInicio || horaFin) {
+      const horaInicioFinal = horaInicio || disponibilidad.horaInicio;
+      const horaFinFinal = horaFin || disponibilidad.horaFin;
 
-    const disponibilidad = await prisma.disponibilidad.update({
+      const horaRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!horaRegex.test(horaInicioFinal) || !horaRegex.test(horaFinFinal)) {
+        return res.status(400).json({
+          error: 'Formato de hora inválido. Use HH:MM (ej: 09:00)'
+        });
+      }
+
+      const [hInicio, mInicio] = horaInicioFinal.split(':').map(Number);
+      const [hFin, mFin] = horaFinFinal.split(':').map(Number);
+      const minutosInicio = hInicio * 60 + mInicio;
+      const minutosFin = hFin * 60 + mFin;
+
+      if (minutosInicio >= minutosFin) {
+        return res.status(400).json({
+          error: 'La hora de inicio debe ser menor que la hora de fin'
+        });
+      }
+    }
+
+    const disponibilidadActualizada = await prisma.disponibilidad.update({
       where: { id },
-      data: dataUpdate
+      data: {
+        ...(diaSemana !== undefined && { diaSemana }),
+        ...(horaInicio && { horaInicio }),
+        ...(horaFin && { horaFin }),
+        ...(activo !== undefined && { activo })
+      }
     });
 
     res.json({
       message: 'Disponibilidad actualizada exitosamente',
-      disponibilidad
+      disponibilidad: disponibilidadActualizada
     });
   } catch (error) {
     next(error);
@@ -127,32 +184,36 @@ export const updateDisponibilidad = async (req, res, next) => {
 };
 
 /**
- * Eliminar disponibilidad
+ * Eliminar disponibilidad (Médico)
  */
-export const deleteDisponibilidad = async (req, res, next) => {
+export const eliminarDisponibilidad = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { rol, id: userId } = req.user;
 
     const disponibilidad = await prisma.disponibilidad.findUnique({
-      where: { id }
+      where: { id },
+      include: { medico: true }
     });
 
     if (!disponibilidad) {
       return res.status(404).json({ error: 'Disponibilidad no encontrada' });
     }
 
-    // Verificar permisos
-    if (req.userRole === 'MEDICO' && req.user.medico?.id !== disponibilidad.medicoId) {
-      return res.status(403).json({ error: 'No tienes permisos para eliminar esta disponibilidad' });
+    // Solo el médico puede gestionar su propia disponibilidad
+    if (rol === 'MEDICO' && disponibilidad.medico.usuarioId !== userId) {
+      return res.status(403).json({
+        error: 'Solo puedes gestionar tu propia disponibilidad'
+      });
     }
 
-    await prisma.disponibilidad.delete({
-      where: { id }
+    // Soft delete
+    await prisma.disponibilidad.update({
+      where: { id },
+      data: { activo: false }
     });
 
-    res.json({
-      message: 'Disponibilidad eliminada exitosamente'
-    });
+    res.json({ message: 'Disponibilidad eliminada exitosamente' });
   } catch (error) {
     next(error);
   }

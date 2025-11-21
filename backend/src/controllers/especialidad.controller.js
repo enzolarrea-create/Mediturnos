@@ -1,31 +1,17 @@
-import { PrismaClient } from '@prisma/client';
-import { validationResult } from 'express-validator';
-
-const prisma = new PrismaClient();
+import { prisma } from '../server.js';
 
 /**
- * Obtener todas las especialidades
+ * Listar especialidades
  */
-export const getEspecialidades = async (req, res, next) => {
+export const listarEspecialidades = async (req, res, next) => {
   try {
-    const { activa } = req.query;
-
-    const where = {};
-    if (activa !== undefined) {
-      where.activa = activa === 'true';
-    }
-
     const especialidades = await prisma.especialidad.findMany({
-      where,
-      include: {
-        _count: {
-          select: {
-            medicos: true,
-            turnos: true
-          }
-        }
+      where: {
+        activa: true
       },
-      orderBy: { nombre: 'asc' }
+      orderBy: {
+        nombre: 'asc'
+      }
     });
 
     res.json({ especialidades });
@@ -35,59 +21,29 @@ export const getEspecialidades = async (req, res, next) => {
 };
 
 /**
- * Obtener especialidad por ID
+ * Crear especialidad (Solo Admin)
  */
-export const getEspecialidadById = async (req, res, next) => {
+export const crearEspecialidad = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
-    const especialidad = await prisma.especialidad.findUnique({
-      where: { id },
-      include: {
-        medicos: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            }
-          }
-        },
-        _count: {
-          select: {
-            turnos: true
-          }
-        }
-      }
-    });
-
-    if (!especialidad) {
-      return res.status(404).json({ error: 'Especialidad no encontrada' });
-    }
-
-    res.json(especialidad);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Crear especialidad
- */
-export const createEspecialidad = async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { nombre, descripcion } = req.body;
+    const { rol } = req.user;
+
+    if (rol !== 'ADMINISTRADOR') {
+      return res.status(403).json({
+        error: 'Solo los administradores pueden crear especialidades'
+      });
+    }
+
+    if (!nombre) {
+      return res.status(400).json({
+        error: 'El nombre es requerido'
+      });
+    }
 
     const especialidad = await prisma.especialidad.create({
       data: {
         nombre,
-        descripcion
+        descripcion: descripcion || null
       }
     });
 
@@ -101,17 +57,19 @@ export const createEspecialidad = async (req, res, next) => {
 };
 
 /**
- * Actualizar especialidad
+ * Actualizar especialidad (Solo Admin)
  */
-export const updateEspecialidad = async (req, res, next) => {
+export const actualizarEspecialidad = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
     const { id } = req.params;
     const { nombre, descripcion, activa } = req.body;
+    const { rol } = req.user;
+
+    if (rol !== 'ADMINISTRADOR') {
+      return res.status(403).json({
+        error: 'Solo los administradores pueden actualizar especialidades'
+      });
+    }
 
     const especialidad = await prisma.especialidad.update({
       where: { id },
@@ -125,56 +83,6 @@ export const updateEspecialidad = async (req, res, next) => {
     res.json({
       message: 'Especialidad actualizada exitosamente',
       especialidad
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Eliminar especialidad (soft delete)
- */
-export const deleteEspecialidad = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    // Verificar si hay médicos o turnos asociados
-    const especialidad = await prisma.especialidad.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            medicos: true,
-            turnos: true
-          }
-        }
-      }
-    });
-
-    if (!especialidad) {
-      return res.status(404).json({ error: 'Especialidad no encontrada' });
-    }
-
-    if (especialidad._count.medicos > 0 || especialidad._count.turnos > 0) {
-      // Soft delete: desactivar en lugar de eliminar
-      const especialidadDesactivada = await prisma.especialidad.update({
-        where: { id },
-        data: { activa: false }
-      });
-
-      return res.json({
-        message: 'Especialidad desactivada (tiene médicos o turnos asociados)',
-        especialidad: especialidadDesactivada
-      });
-    }
-
-    // Si no tiene relaciones, eliminar físicamente
-    await prisma.especialidad.delete({
-      where: { id }
-    });
-
-    res.json({
-      message: 'Especialidad eliminada exitosamente'
     });
   } catch (error) {
     next(error);

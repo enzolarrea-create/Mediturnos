@@ -1,42 +1,44 @@
-import { PrismaClient } from '@prisma/client';
-import { validationResult } from 'express-validator';
-
-const prisma = new PrismaClient();
+import { prisma } from '../server.js';
 
 /**
- * Obtener todos los turnos (con filtros)
+ * Listar turnos (con filtros según rol)
  */
-export const getTurnos = async (req, res, next) => {
+export const listarTurnos = async (req, res, next) => {
   try {
-    const {
-      pacienteId,
-      medicoId,
-      especialidadId,
-      fecha,
-      estado,
-      fechaDesde,
-      fechaHasta,
-      page = 1,
-      limit = 20
-    } = req.query;
+    const { fecha, medicoId, pacienteId, estado } = req.query;
+    const { rol, id } = req.user;
 
+    // Construir filtros según el rol
     const where = {};
 
-    // Filtros según rol
-    if (req.userRole === 'PACIENTE') {
-      where.pacienteId = req.user.paciente?.id;
-    } else if (req.userRole === 'MEDICO') {
-      where.medicoId = req.user.medico?.id;
-    } else {
-      // Secretario y Administrador pueden ver todos
-      if (pacienteId) where.pacienteId = pacienteId;
-      if (medicoId) where.medicoId = medicoId;
+    // Paciente solo ve sus propios turnos
+    if (rol === 'PACIENTE') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { usuarioId: id }
+      });
+      if (paciente) {
+        where.pacienteId = paciente.id;
+      } else {
+        return res.json({ turnos: [] });
+      }
     }
 
-    if (especialidadId) where.especialidadId = especialidadId;
-    if (estado) where.estado = estado;
+    // Médico solo ve sus propios turnos
+    if (rol === 'MEDICO') {
+      const medico = await prisma.medico.findUnique({
+        where: { usuarioId: id }
+      });
+      if (medico) {
+        where.medicoId = medico.id;
+      } else {
+        return res.json({ turnos: [] });
+      }
+    }
 
-    // Filtro por fecha
+    // Secretario y Admin pueden ver todos o filtrar
+    if (medicoId) where.medicoId = medicoId;
+    if (pacienteId) where.pacienteId = pacienteId;
+    if (estado) where.estado = estado;
     if (fecha) {
       const fechaInicio = new Date(fecha);
       fechaInicio.setHours(0, 0, 0, 0);
@@ -46,81 +48,67 @@ export const getTurnos = async (req, res, next) => {
         gte: fechaInicio,
         lte: fechaFin
       };
-    } else if (fechaDesde || fechaHasta) {
-      where.fecha = {};
-      if (fechaDesde) {
-        where.fecha.gte = new Date(fechaDesde);
-      }
-      if (fechaHasta) {
-        const fechaFin = new Date(fechaHasta);
-        fechaFin.setHours(23, 59, 59, 999);
-        where.fecha.lte = fechaFin;
-      }
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [turnos, total] = await Promise.all([
-      prisma.turno.findMany({
-        where,
-        include: {
-          paciente: {
-            include: {
-              usuario: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  apellido: true,
-                  email: true,
-                  telefono: true
+    const turnos = await prisma.turno.findMany({
+      where,
+      include: {
+        paciente: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            dni: true,
+            telefono: true
+          }
+        },
+        medico: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            matricula: true,
+            especialidades: {
+              include: {
+                especialidad: {
+                  select: {
+                    nombre: true
+                  }
                 }
               }
             }
-          },
-          medico: {
-            include: {
-              usuario: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  apellido: true
-                }
-              },
-              especialidad: true
-            }
-          },
-          especialidad: true
+          }
         },
-        orderBy: [
-          { fecha: 'asc' },
-          { hora: 'asc' }
-        ],
-        skip,
-        take: parseInt(limit)
-      }),
-      prisma.turno.count({ where })
-    ]);
-
-    res.json({
-      turnos,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit))
-      }
+        notasMedicas: {
+          select: {
+            id: true,
+            contenido: true,
+            fecha: true
+          },
+          orderBy: {
+            fecha: 'desc'
+          }
+        }
+      },
+      orderBy: [
+        { fecha: 'asc' },
+        { hora: 'asc' }
+      ]
     });
+
+    res.json({ turnos });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Obtener un turno por ID
+ * Obtener un turno específico
  */
-export const getTurnoById = async (req, res, next) => {
+export const obtenerTurno = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { rol, id: userId } = req.user;
 
     const turno = await prisma.turno.findUnique({
       where: { id },
@@ -129,34 +117,23 @@ export const getTurnoById = async (req, res, next) => {
           include: {
             usuario: {
               select: {
-                id: true,
-                nombre: true,
-                apellido: true,
-                email: true,
-                telefono: true,
-                direccion: true
+                email: true
               }
             }
           }
         },
         medico: {
           include: {
-            usuario: {
-              select: {
-                id: true,
-                nombre: true,
-                apellido: true
+            especialidades: {
+              include: {
+                especialidad: true
               }
-            },
-            especialidad: true
+            }
           }
         },
-        especialidad: true,
-        creadoPor: {
-          select: {
-            id: true,
-            nombre: true,
-            apellido: true
+        notasMedicas: {
+          orderBy: {
+            fecha: 'desc'
           }
         }
       }
@@ -167,53 +144,94 @@ export const getTurnoById = async (req, res, next) => {
     }
 
     // Verificar permisos
-    if (req.userRole === 'PACIENTE' && turno.pacienteId !== req.user.paciente?.id) {
-      return res.status(403).json({ error: 'No tienes permisos para ver este turno' });
-    }
-    if (req.userRole === 'MEDICO' && turno.medicoId !== req.user.medico?.id) {
-      return res.status(403).json({ error: 'No tienes permisos para ver este turno' });
+    if (rol === 'PACIENTE') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (turno.pacienteId !== paciente?.id) {
+        return res.status(403).json({ error: 'No tienes permisos para ver este turno' });
+      }
     }
 
-    res.json(turno);
+    if (rol === 'MEDICO') {
+      const medico = await prisma.medico.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (turno.medicoId !== medico?.id) {
+        return res.status(403).json({ error: 'No tienes permisos para ver este turno' });
+      }
+    }
+
+    res.json({ turno });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Crear nuevo turno
+ * Crear un nuevo turno
  */
-export const createTurno = async (req, res, next) => {
+export const crearTurno = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    const { pacienteId, medicoId, fecha, hora, motivoConsulta } = req.body;
+    const { rol, id: userId } = req.user;
+
+    // Validaciones
+    if (!pacienteId || !medicoId || !fecha || !hora) {
+      return res.status(400).json({
+        error: 'Faltan campos requeridos',
+        required: ['pacienteId', 'medicoId', 'fecha', 'hora']
+      });
     }
 
-    const {
-      pacienteId,
-      medicoId,
-      especialidadId,
-      fecha,
-      hora,
-      duracion = 30,
-      motivoConsulta,
-      observaciones
-    } = req.body;
+    // Si es paciente, solo puede crear turnos para sí mismo
+    if (rol === 'PACIENTE') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (paciente?.id !== pacienteId) {
+        return res.status(403).json({
+          error: 'Solo puedes crear turnos para ti mismo'
+        });
+      }
+    }
 
-    // Verificar disponibilidad del médico
-    const fechaTurno = new Date(`${fecha}T${hora}`);
-    const fechaFin = new Date(fechaTurno);
-    fechaFin.setMinutes(fechaFin.getMinutes() + duracion);
+    // Verificar que el médico existe y está activo
+    const medico = await prisma.medico.findUnique({
+      where: { id: medicoId },
+      include: { usuario: true }
+    });
 
-    // Verificar si hay conflicto con otro turno
+    if (!medico || !medico.activo || !medico.usuario.activo) {
+      return res.status(404).json({ error: 'Médico no encontrado o inactivo' });
+    }
+
+    // Verificar disponibilidad (simplificado - se puede mejorar)
+    const fechaTurno = new Date(fecha);
+    const diaSemana = fechaTurno.getDay();
+
+    const disponibilidad = await prisma.disponibilidad.findFirst({
+      where: {
+        medicoId,
+        diaSemana,
+        activo: true,
+        horaInicio: { lte: hora },
+        horaFin: { gte: hora }
+      }
+    });
+
+    if (!disponibilidad && rol === 'PACIENTE') {
+      return res.status(400).json({
+        error: 'El médico no tiene disponibilidad en ese horario'
+      });
+    }
+
+    // Verificar que no haya otro turno en el mismo horario
     const turnoExistente = await prisma.turno.findFirst({
       where: {
         medicoId,
-        fecha: {
-          gte: fechaTurno,
-          lt: fechaFin
-        },
+        fecha: fechaTurno,
+        hora,
         estado: {
           notIn: ['CANCELADO', 'AUSENTE']
         }
@@ -222,79 +240,49 @@ export const createTurno = async (req, res, next) => {
 
     if (turnoExistente) {
       return res.status(409).json({
-        error: 'Conflicto de horario',
-        message: 'El médico ya tiene un turno en ese horario'
+        error: 'Ya existe un turno en ese horario'
       });
     }
 
-    // Si es paciente, usar su propio ID
-    const pacienteIdFinal = req.userRole === 'PACIENTE' 
-      ? req.user.paciente.id 
-      : pacienteId;
-
-    if (!pacienteIdFinal) {
-      return res.status(400).json({ error: 'ID de paciente requerido' });
-    }
-
+    // Crear turno
     const turno = await prisma.turno.create({
       data: {
-        pacienteId: pacienteIdFinal,
+        pacienteId,
         medicoId,
-        especialidadId,
         fecha: fechaTurno,
         hora,
-        duracion,
-        motivoConsulta,
-        observaciones,
-        estado: 'PENDIENTE',
-        creadoPorId: req.userId
+        motivoConsulta: motivoConsulta || null,
+        estado: 'PENDIENTE'
       },
       include: {
         paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true,
-                email: true
-              }
-            }
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            dni: true,
+            telefono: true
           }
         },
         medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            matricula: true
           }
-        },
-        especialidad: true
+        }
       }
     });
 
-    // Crear notificación para el paciente y médico
-    await Promise.all([
-      prisma.notificacion.create({
-        data: {
-          usuarioId: turno.paciente.usuario.id,
-          tipo: 'TURNO_CREADO',
-          titulo: 'Turno creado',
-          mensaje: `Tu turno con ${turno.medico.usuario.nombre} ${turno.medico.usuario.apellido} ha sido creado para el ${fechaTurno.toLocaleDateString()} a las ${hora}`
-        }
-      }),
-      prisma.notificacion.create({
-        data: {
-          usuarioId: turno.medico.usuario.id,
-          tipo: 'TURNO_CREADO',
-          titulo: 'Nuevo turno',
-          mensaje: `Tienes un nuevo turno con ${turno.paciente.usuario.nombre} ${turno.paciente.usuario.apellido} el ${fechaTurno.toLocaleDateString()} a las ${hora}`
-        }
-      })
-    ]);
+    // Crear notificación para el médico
+    await prisma.notificacion.create({
+      data: {
+        usuarioId: medico.usuarioId,
+        tipo: 'TURNO_CREADO',
+        mensaje: `Nuevo turno con ${turno.paciente.nombre} ${turno.paciente.apellido} el ${fecha} a las ${hora}`
+      }
+    });
 
     res.status(201).json({
       message: 'Turno creado exitosamente',
@@ -306,141 +294,135 @@ export const createTurno = async (req, res, next) => {
 };
 
 /**
- * Actualizar turno
+ * Modificar un turno
  */
-export const updateTurno = async (req, res, next) => {
+export const modificarTurno = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const {
-      fecha,
-      hora,
-      duracion,
-      motivoConsulta,
-      observaciones,
-      estado
-    } = req.body;
+    const { fecha, hora, estado, motivoConsulta, observaciones } = req.body;
+    const { rol } = req.user;
 
-    // Verificar que el turno existe
-    const turnoExistente = await prisma.turno.findUnique({
-      where: { id },
-      include: {
-        paciente: true,
-        medico: true
-      }
+    // Solo Secretario, Médico y Admin pueden modificar
+    if (rol === 'PACIENTE') {
+      return res.status(403).json({
+        error: 'No tienes permisos para modificar turnos'
+      });
+    }
+
+    const turno = await prisma.turno.findUnique({
+      where: { id }
     });
 
-    if (!turnoExistente) {
+    if (!turno) {
       return res.status(404).json({ error: 'Turno no encontrado' });
     }
 
-    // Verificar permisos
-    const puedeEditar = 
-      req.userRole === 'ADMINISTRADOR' ||
-      req.userRole === 'SECRETARIO' ||
-      (req.userRole === 'MEDICO' && turnoExistente.medicoId === req.user.medico?.id) ||
-      (req.userRole === 'PACIENTE' && turnoExistente.pacienteId === req.user.paciente?.id && estado === 'CANCELADO');
-
-    if (!puedeEditar) {
-      return res.status(403).json({ error: 'No tienes permisos para editar este turno' });
-    }
-
-    // Si se cambia fecha/hora, verificar disponibilidad
+    // Verificar disponibilidad si se cambia fecha/hora
     if (fecha || hora) {
-      const nuevaFecha = fecha ? new Date(`${fecha}T${hora || turnoExistente.hora}`) : turnoExistente.fecha;
-      const nuevaHora = hora || turnoExistente.hora;
-      const nuevaDuracion = duracion || turnoExistente.duracion;
+      const nuevaFecha = fecha ? new Date(fecha) : turno.fecha;
+      const nuevaHora = hora || turno.hora;
+      const diaSemana = nuevaFecha.getDay();
 
-      const fechaInicio = new Date(`${nuevaFecha.toISOString().split('T')[0]}T${nuevaHora}`);
-      const fechaFin = new Date(fechaInicio);
-      fechaFin.setMinutes(fechaFin.getMinutes() + nuevaDuracion);
-
-      const turnoConflicto = await prisma.turno.findFirst({
+      const disponibilidad = await prisma.disponibilidad.findFirst({
         where: {
-          medicoId: turnoExistente.medicoId,
+          medicoId: turno.medicoId,
+          diaSemana,
+          activo: true,
+          horaInicio: { lte: nuevaHora },
+          horaFin: { gte: nuevaHora }
+        }
+      });
+
+      if (!disponibilidad) {
+        return res.status(400).json({
+          error: 'El médico no tiene disponibilidad en ese horario'
+        });
+      }
+
+      // Verificar conflicto con otro turno
+      const conflicto = await prisma.turno.findFirst({
+        where: {
+          medicoId: turno.medicoId,
+          fecha: nuevaFecha,
+          hora: nuevaHora,
           id: { not: id },
-          fecha: {
-            gte: fechaInicio,
-            lt: fechaFin
-          },
           estado: {
             notIn: ['CANCELADO', 'AUSENTE']
           }
         }
       });
 
-      if (turnoConflicto) {
+      if (conflicto) {
         return res.status(409).json({
-          error: 'Conflicto de horario',
-          message: 'El médico ya tiene un turno en ese horario'
+          error: 'Ya existe otro turno en ese horario'
         });
       }
     }
 
-    const dataUpdate = {};
-    if (fecha && hora) {
-      dataUpdate.fecha = new Date(`${fecha}T${hora}`);
-      dataUpdate.hora = hora;
-    }
-    if (duracion) dataUpdate.duracion = duracion;
-    if (motivoConsulta !== undefined) dataUpdate.motivoConsulta = motivoConsulta;
-    if (observaciones !== undefined) dataUpdate.observaciones = observaciones;
-    if (estado) dataUpdate.estado = estado;
-
-    const turno = await prisma.turno.update({
+    const turnoActualizado = await prisma.turno.update({
       where: { id },
-      data: dataUpdate,
+      data: {
+        ...(fecha && { fecha: new Date(fecha) }),
+        ...(hora && { hora }),
+        ...(estado && { estado }),
+        ...(motivoConsulta !== undefined && { motivoConsulta }),
+        ...(observaciones !== undefined && { observaciones })
+      },
       include: {
         paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true,
-                email: true
-              }
-            }
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            dni: true,
+            telefono: true
           }
         },
         medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true
           }
-        },
-        especialidad: true
+        }
       }
     });
 
-    // Crear notificación si cambió el estado
-    if (estado && estado !== turnoExistente.estado) {
-      await Promise.all([
-        prisma.notificacion.create({
+    // Crear notificaciones según el cambio
+    if (estado === 'CANCELADO') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { id: turno.pacienteId },
+        include: { usuario: true }
+      });
+      const medico = await prisma.medico.findUnique({
+        where: { id: turno.medicoId },
+        include: { usuario: true }
+      });
+
+      if (paciente) {
+        await prisma.notificacion.create({
           data: {
-            usuarioId: turno.paciente.usuario.id,
-            tipo: `TURNO_${estado}`,
-            titulo: `Turno ${estado.toLowerCase()}`,
-            mensaje: `Tu turno ha sido ${estado.toLowerCase()}`
+            usuarioId: paciente.usuarioId,
+            tipo: 'TURNO_CANCELADO',
+            mensaje: `Tu turno del ${turno.fecha.toLocaleDateString()} a las ${turno.hora} ha sido cancelado`
           }
-        }),
-        prisma.notificacion.create({
+        });
+      }
+
+      if (medico) {
+        await prisma.notificacion.create({
           data: {
-            usuarioId: turno.medico.usuario.id,
-            tipo: `TURNO_${estado}`,
-            titulo: `Turno ${estado.toLowerCase()}`,
-            mensaje: `El turno ha sido ${estado.toLowerCase()}`
+            usuarioId: medico.usuarioId,
+            tipo: 'TURNO_CANCELADO',
+            mensaje: `Turno cancelado con ${turnoActualizado.paciente.nombre} ${turnoActualizado.paciente.apellido}`
           }
-        })
-      ]);
+        });
+      }
     }
 
     res.json({
       message: 'Turno actualizado exitosamente',
-      turno
+      turno: turnoActualizado
     });
   } catch (error) {
     next(error);
@@ -448,24 +430,21 @@ export const updateTurno = async (req, res, next) => {
 };
 
 /**
- * Eliminar turno (cancelar)
+ * Cancelar un turno
  */
-export const deleteTurno = async (req, res, next) => {
+export const cancelarTurno = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { rol, id: userId } = req.user;
 
     const turno = await prisma.turno.findUnique({
       where: { id },
       include: {
         paciente: {
-          include: {
-            usuario: true
-          }
+          include: { usuario: true }
         },
         medico: {
-          include: {
-            usuario: true
-          }
+          include: { usuario: true }
         }
       }
     });
@@ -475,147 +454,55 @@ export const deleteTurno = async (req, res, next) => {
     }
 
     // Verificar permisos
-    const puedeEliminar = 
-      req.userRole === 'ADMINISTRADOR' ||
-      req.userRole === 'SECRETARIO' ||
-      (req.userRole === 'MEDICO' && turno.medicoId === req.user.medico?.id) ||
-      (req.userRole === 'PACIENTE' && turno.pacienteId === req.user.paciente?.id);
-
-    if (!puedeEliminar) {
-      return res.status(403).json({ error: 'No tienes permisos para cancelar este turno' });
+    if (rol === 'PACIENTE') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (turno.pacienteId !== paciente?.id) {
+        return res.status(403).json({
+          error: 'Solo puedes cancelar tus propios turnos'
+        });
+      }
     }
 
-    // En lugar de eliminar, cambiar estado a CANCELADO
+    if (turno.estado === 'CANCELADO') {
+      return res.status(400).json({ error: 'El turno ya está cancelado' });
+    }
+
     const turnoCancelado = await prisma.turno.update({
       where: { id },
       data: { estado: 'CANCELADO' },
       include: {
         paciente: {
-          include: {
-            usuario: true
+          select: {
+            nombre: true,
+            apellido: true
           }
         },
         medico: {
-          include: {
-            usuario: true
+          select: {
+            nombre: true,
+            apellido: true
           }
         }
       }
     });
 
-    // Crear notificaciones
-    await Promise.all([
-      prisma.notificacion.create({
+    // Notificar al médico
+    if (turno.medico) {
+      await prisma.notificacion.create({
         data: {
-          usuarioId: turnoCancelado.paciente.usuario.id,
+          usuarioId: turno.medico.usuarioId,
           tipo: 'TURNO_CANCELADO',
-          titulo: 'Turno cancelado',
-          mensaje: 'Tu turno ha sido cancelado'
+          mensaje: `Turno cancelado con ${turnoCancelado.paciente.nombre} ${turnoCancelado.paciente.apellido}`
         }
-      }),
-      prisma.notificacion.create({
-        data: {
-          usuarioId: turnoCancelado.medico.usuario.id,
-          tipo: 'TURNO_CANCELADO',
-          titulo: 'Turno cancelado',
-          mensaje: 'Un turno ha sido cancelado'
-        }
-      })
-    ]);
+      });
+    }
 
     res.json({
       message: 'Turno cancelado exitosamente',
       turno: turnoCancelado
     });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener turnos disponibles para un médico en una fecha
- */
-export const getTurnosDisponibles = async (req, res, next) => {
-  try {
-    const { medicoId, fecha } = req.query;
-
-    if (!medicoId || !fecha) {
-      return res.status(400).json({ error: 'medicoId y fecha son requeridos' });
-    }
-
-    // Obtener disponibilidad del médico
-    const fechaObj = new Date(fecha);
-    const diaSemana = fechaObj.getDay();
-
-    const disponibilidad = await prisma.disponibilidad.findMany({
-      where: {
-        medicoId,
-        diaSemana,
-        activa: true
-      }
-    });
-
-    if (disponibilidad.length === 0) {
-      return res.json({ turnosDisponibles: [] });
-    }
-
-    // Obtener turnos ya ocupados
-    const fechaInicio = new Date(fecha);
-    fechaInicio.setHours(0, 0, 0, 0);
-    const fechaFin = new Date(fecha);
-    fechaFin.setHours(23, 59, 59, 999);
-
-    const turnosOcupados = await prisma.turno.findMany({
-      where: {
-        medicoId,
-        fecha: {
-          gte: fechaInicio,
-          lte: fechaFin
-        },
-        estado: {
-          notIn: ['CANCELADO', 'AUSENTE']
-        }
-      },
-      select: {
-        hora: true,
-        duracion: true
-      }
-    });
-
-    // Generar horarios disponibles
-    const turnosDisponibles = [];
-    
-    disponibilidad.forEach(disp => {
-      const [horaInicio, minutoInicio] = disp.horaInicio.split(':').map(Number);
-      const [horaFin, minutoFin] = disp.horaFin.split(':').map(Number);
-      
-      let horaActual = horaInicio * 60 + minutoInicio;
-      const horaFinMinutos = horaFin * 60 + minutoFin;
-
-      while (horaActual + disp.duracionTurno <= horaFinMinutos) {
-        const horaStr = `${Math.floor(horaActual / 60).toString().padStart(2, '0')}:${(horaActual % 60).toString().padStart(2, '0')}`;
-        
-        // Verificar si está ocupado
-        const estaOcupado = turnosOcupados.some(turno => {
-          const [turnoHora, turnoMinuto] = turno.hora.split(':').map(Number);
-          const turnoInicio = turnoHora * 60 + turnoMinuto;
-          const turnoFin = turnoInicio + turno.duracion;
-          
-          return horaActual < turnoFin && (horaActual + disp.duracionTurno) > turnoInicio;
-        });
-
-        if (!estaOcupado) {
-          turnosDisponibles.push({
-            hora: horaStr,
-            duracion: disp.duracionTurno
-          });
-        }
-
-        horaActual += disp.duracionTurno;
-      }
-    });
-
-    res.json({ turnosDisponibles });
   } catch (error) {
     next(error);
   }

@@ -1,18 +1,20 @@
 import express from 'express';
-import * as notificacionController from '../controllers/notificacion.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import {
+  obtenerNotificaciones,
+  marcarComoLeida,
+  marcarTodasComoLeidas
+} from '../controllers/notificacion.controller.js';
+import { authenticate } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
 // Todas las rutas requieren autenticación
-router.use(authenticateToken);
+router.use(authenticate);
 
 // Rutas
-router.get('/', notificacionController.getNotificaciones);
-router.get('/unread-count', notificacionController.getUnreadCount);
-router.put('/:id/read', notificacionController.markAsRead);
-router.put('/read-all', notificacionController.markAllAsRead);
-router.delete('/:id', notificacionController.deleteNotificacion);
+router.get('/', obtenerNotificaciones);
+router.put('/:id/leida', marcarComoLeida);
+router.put('/marcar-todas', marcarTodasComoLeidas);
 
 export default router;
 

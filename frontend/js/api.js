@@ -1,23 +1,22 @@
 /**
- * Cliente API para Mediturnos
- * Maneja todas las comunicaciones con el backend
+ * Cliente API para MediTurnos
+ * Maneja todas las llamadas al backend
  */
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
-/**
- * Obtener token de autenticación del localStorage
- */
-function getAuthToken() {
-  return localStorage.getItem('authToken');
-}
+// Almacenar token en localStorage
+const getToken = () => localStorage.getItem('token');
+const setToken = (token) => localStorage.setItem('token', token);
+const removeToken = () => localStorage.removeItem('token');
 
 /**
- * Realizar petición HTTP con autenticación
+ * Función helper para hacer requests
  */
 async function apiRequest(endpoint, options = {}) {
-  const token = getAuthToken();
-  
+  const url = `${API_BASE_URL}${endpoint}`;
+  const token = getToken();
+
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };
@@ -35,327 +34,232 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-    
-    // Si la respuesta no es exitosa, lanzar error
+    const response = await fetch(url, config);
+    const data = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ 
-        error: 'Error desconocido',
-        message: `Error ${response.status}: ${response.statusText}`
-      }));
-      throw new Error(errorData.message || errorData.error || 'Error en la petición');
+      // Si el token es inválido, redirigir al login
+      if (response.status === 401) {
+        removeToken();
+        if (window.location.pathname !== '/landing.html') {
+          window.location.href = '/landing.html';
+        }
+      }
+      throw new Error(data.error || data.message || 'Error en la petición');
     }
 
-    return await response.json();
+    return data;
   } catch (error) {
-    console.error('Error en API request:', error);
+    console.error('API Error:', error);
     throw error;
   }
 }
 
-/**
- * API de Autenticación
- */
+// ==================== AUTENTICACIÓN ====================
+
 export const authAPI = {
-  async register(userData) {
+  register: async (userData) => {
     return apiRequest('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
   },
 
-  async login(email, password) {
-    const response = await apiRequest('/auth/login', {
+  login: async (email, password) => {
+    const data = await apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
     
-    // Guardar token
-    if (response.token) {
-      localStorage.setItem('authToken', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+    if (data.token) {
+      setToken(data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
     }
     
-    return response;
+    return data;
   },
 
-  async logout() {
-    localStorage.removeItem('authToken');
+  logout: () => {
+    removeToken();
     localStorage.removeItem('user');
-    window.location.href = '/index.html';
+    window.location.href = '/landing.html';
   },
 
-  async getCurrentUser() {
+  getMe: async () => {
     return apiRequest('/auth/me');
-  },
-
-  async updateProfile(data) {
-    return apiRequest('/auth/me', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async changePassword(currentPassword, newPassword) {
-    return apiRequest('/auth/change-password', {
-      method: 'PUT',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
   },
 };
 
-/**
- * API de Turnos
- */
+// ==================== TURNOS ====================
+
 export const turnosAPI = {
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/turnos?${queryParams}`);
+  listar: async (filtros = {}) => {
+    const queryParams = new URLSearchParams(filtros).toString();
+    const endpoint = `/turnos${queryParams ? `?${queryParams}` : ''}`;
+    return apiRequest(endpoint);
   },
 
-  async getById(id) {
+  obtener: async (id) => {
     return apiRequest(`/turnos/${id}`);
   },
 
-  async create(turnoData) {
+  crear: async (turnoData) => {
     return apiRequest('/turnos', {
       method: 'POST',
       body: JSON.stringify(turnoData),
     });
   },
 
-  async update(id, turnoData) {
+  modificar: async (id, turnoData) => {
     return apiRequest(`/turnos/${id}`, {
       method: 'PUT',
       body: JSON.stringify(turnoData),
     });
   },
 
-  async cancel(id) {
+  cancelar: async (id) => {
     return apiRequest(`/turnos/${id}`, {
       method: 'DELETE',
     });
   },
-
-  async getDisponibles(medicoId, fecha) {
-    return apiRequest(`/turnos/disponibles?medicoId=${medicoId}&fecha=${fecha}`);
-  },
 };
 
-/**
- * API de Pacientes
- */
+// ==================== PACIENTES ====================
+
 export const pacientesAPI = {
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/pacientes?${queryParams}`);
+  listar: async (filtros = {}) => {
+    const queryParams = new URLSearchParams(filtros).toString();
+    const endpoint = `/pacientes${queryParams ? `?${queryParams}` : ''}`;
+    return apiRequest(endpoint);
   },
 
-  async getById(id) {
+  obtener: async (id) => {
     return apiRequest(`/pacientes/${id}`);
   },
 
-  async getMiPerfil() {
-    return apiRequest('/pacientes/me');
-  },
-
-  async updateMiPerfil(data) {
-    return apiRequest('/pacientes/me', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async getTurnos(id, filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/pacientes/${id}/turnos?${queryParams}`);
-  },
-
-  async getHistorial(id) {
+  obtenerHistorial: async (id) => {
     return apiRequest(`/pacientes/${id}/historial`);
   },
 };
 
-/**
- * API de Médicos
- */
+// ==================== MÉDICOS ====================
+
 export const medicosAPI = {
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/medicos?${queryParams}`);
+  listar: async (filtros = {}) => {
+    const queryParams = new URLSearchParams(filtros).toString();
+    const endpoint = `/medicos${queryParams ? `?${queryParams}` : ''}`;
+    return apiRequest(endpoint);
   },
 
-  async getById(id) {
+  obtener: async (id) => {
     return apiRequest(`/medicos/${id}`);
   },
 
-  async getMiPerfil() {
-    return apiRequest('/medicos/me');
+  crear: async (medicoData) => {
+    return apiRequest('/medicos', {
+      method: 'POST',
+      body: JSON.stringify(medicoData),
+    });
   },
 
-  async getTurnos(id, filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/medicos/${id}/turnos?${queryParams}`);
+  actualizar: async (id, medicoData) => {
+    return apiRequest(`/medicos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(medicoData),
+    });
   },
 
-  async getDisponibilidad(id) {
-    return apiRequest(`/medicos/${id}/disponibilidad`);
+  eliminar: async (id) => {
+    return apiRequest(`/medicos/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 
-/**
- * API de Especialidades
- */
+// ==================== DISPONIBILIDAD ====================
+
+export const disponibilidadAPI = {
+  obtener: async (medicoId) => {
+    return apiRequest(`/disponibilidad/${medicoId}`);
+  },
+
+  crear: async (disponibilidadData) => {
+    return apiRequest('/disponibilidad', {
+      method: 'POST',
+      body: JSON.stringify(disponibilidadData),
+    });
+  },
+
+  actualizar: async (id, disponibilidadData) => {
+    return apiRequest(`/disponibilidad/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(disponibilidadData),
+    });
+  },
+
+  eliminar: async (id) => {
+    return apiRequest(`/disponibilidad/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// ==================== ESPECIALIDADES ====================
+
 export const especialidadesAPI = {
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/especialidades?${queryParams}`);
+  listar: async () => {
+    return apiRequest('/especialidades');
   },
 
-  async getById(id) {
-    return apiRequest(`/especialidades/${id}`);
-  },
-
-  async create(data) {
+  crear: async (especialidadData) => {
     return apiRequest('/especialidades', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(especialidadData),
     });
   },
 
-  async update(id, data) {
+  actualizar: async (id, especialidadData) => {
     return apiRequest(`/especialidades/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async delete(id) {
-    return apiRequest(`/especialidades/${id}`, {
-      method: 'DELETE',
+      body: JSON.stringify(especialidadData),
     });
   },
 };
 
-/**
- * API de Disponibilidades
- */
-export const disponibilidadesAPI = {
-  async getByMedico(medicoId) {
-    return apiRequest(`/disponibilidades/medico/${medicoId}`);
-  },
+// ==================== NOTAS MÉDICAS ====================
 
-  async create(data) {
-    return apiRequest('/disponibilidades', {
+export const notasMedicasAPI = {
+  crear: async (notaData) => {
+    return apiRequest('/notas-medicas', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(notaData),
     });
   },
 
-  async update(id, data) {
-    return apiRequest(`/disponibilidades/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async delete(id) {
-    return apiRequest(`/disponibilidades/${id}`, {
-      method: 'DELETE',
-    });
+  obtenerPorTurno: async (turnoId) => {
+    return apiRequest(`/notas-medicas/turno/${turnoId}`);
   },
 };
 
-/**
- * API de Notificaciones
- */
+// ==================== NOTIFICACIONES ====================
+
 export const notificacionesAPI = {
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/notificaciones?${queryParams}`);
+  listar: async (filtros = {}) => {
+    const queryParams = new URLSearchParams(filtros).toString();
+    const endpoint = `/notificaciones${queryParams ? `?${queryParams}` : ''}`;
+    return apiRequest(endpoint);
   },
 
-  async getUnreadCount() {
-    return apiRequest('/notificaciones/unread-count');
-  },
-
-  async markAsRead(id) {
-    return apiRequest(`/notificaciones/${id}/read`, {
+  marcarComoLeida: async (id) => {
+    return apiRequest(`/notificaciones/${id}/leida`, {
       method: 'PUT',
     });
   },
 
-  async markAllAsRead() {
-    return apiRequest('/notificaciones/read-all', {
+  marcarTodasComoLeidas: async () => {
+    return apiRequest('/notificaciones/marcar-todas', {
       method: 'PUT',
     });
   },
-
-  async delete(id) {
-    return apiRequest(`/notificaciones/${id}`, {
-      method: 'DELETE',
-    });
-  },
 };
-
-/**
- * API de Estadísticas
- */
-export const estadisticasAPI = {
-  async getDashboard() {
-    return apiRequest('/estadisticas/dashboard');
-  },
-
-  async getTurnos(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    return apiRequest(`/estadisticas/turnos?${queryParams}`);
-  },
-
-  async getMedicos() {
-    return apiRequest('/estadisticas/medicos');
-  },
-};
-
-/**
- * Verificar si el usuario está autenticado
- */
-export function isAuthenticated() {
-  return !!getAuthToken();
-}
-
-/**
- * Obtener información del usuario actual
- */
-export function getCurrentUser() {
-  const userStr = localStorage.getItem('user');
-  return userStr ? JSON.parse(userStr) : null;
-}
-
-/**
- * Obtener rol del usuario actual
- */
-export function getCurrentUserRole() {
-  const user = getCurrentUser();
-  return user ? user.rol : null;
-}
-
-/**
- * Redirigir según el rol del usuario
- */
-export function redirectByRole() {
-  const role = getCurrentUserRole();
-  const roleMap = {
-    'PACIENTE': '/dashboard/paciente.html',
-    'MEDICO': '/dashboard/medico.html',
-    'SECRETARIO': '/dashboard/secretario.html',
-    'ADMINISTRADOR': '/dashboard/administrador.html',
-  };
-  
-  const redirectPath = roleMap[role];
-  if (redirectPath) {
-    window.location.href = redirectPath;
-  } else {
-    window.location.href = '/index.html';
-  }
-}
 

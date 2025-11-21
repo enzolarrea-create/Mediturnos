@@ -1,335 +1,199 @@
-# Arquitectura del Sistema Mediturnos
+# 🏗️ Arquitectura del Sistema MediTurnos
 
-## 📐 Diagrama de Capas
+## 📋 Recomendación de Stack Tecnológico
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    FRONTEND (Cliente)                    │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │ Landing  │  │  Login   │  │ Dashboard│  │  Admin  │ │
-│  │   Page   │  │ Register │  │  (Roles) │  │  Panel  │ │
-│  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │         JavaScript (API Client + Auth)           │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          │ HTTP/HTTPS
-                          │ (REST API)
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                    BACKEND (Express)                      │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │              Middleware Layer                      │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐         │ │
-│  │  │   CORS   │  │   Auth   │  │  Error   │         │ │
-│  │  │          │  │   JWT    │  │ Handler  │         │ │
-│  │  └──────────┘  └──────────┘  └──────────┘         │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │              Routes Layer                         │ │
-│  │  /api/auth  /api/turnos  /api/pacientes  ...      │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │           Controllers Layer                        │ │
-│  │  auth.controller  turno.controller  ...            │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │           Services Layer (Opcional)                │ │
-│  │  Business Logic & Complex Operations               │ │
-│  └────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          │ Prisma ORM
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│              BASE DE DATOS (PostgreSQL)                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │ Usuarios │  │  Turnos  │  │ Médicos  │  │  ...    │ │
-│  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
+### **Decisión: Node.js + Express + PostgreSQL + Prisma**
 
-## 🔄 Flujo de Comunicación
+**¿Por qué este stack?**
+- ✅ **Node.js/Express**: Popular, fácil de aprender, gran ecosistema, ideal para proyectos universitarios
+- ✅ **PostgreSQL**: Base de datos robusta y gratuita en hosting (Render, Railway)
+- ✅ **Prisma**: ORM moderno, intuitivo, excelente para principiantes
+- ✅ **JWT**: Autenticación estándar y segura
+- ✅ **HTML/CSS/JS Vanilla**: Mantenemos tu frontend actual, lo hacemos funcional
 
-### 1. Autenticación
+**Alternativas consideradas:**
+- ❌ React: Añade complejidad innecesaria para un proyecto universitario
+- ❌ Flask/Django: Cambiaría todo el frontend, más trabajo de migración
+- ❌ MongoDB: Menos estructura, PostgreSQL es mejor para datos relacionales
+
+## 🏛️ Arquitectura General
 
 ```
-Usuario → Frontend → POST /api/auth/login
-                    ↓
-                 Backend valida credenciales
-                    ↓
-                 Genera JWT
-                    ↓
-                 Retorna token
-                    ↓
-Frontend almacena token en localStorage
+┌─────────────────┐
+│   Frontend       │
+│  (HTML/CSS/JS)   │
+└────────┬─────────┘
+         │ HTTP/REST API
+         │
+┌────────▼─────────┐
+│   Backend        │
+│  (Express.js)    │
+│  - Routes        │
+│  - Controllers   │
+│  - Middleware    │
+└────────┬─────────┘
+         │
+┌────────▼─────────┐
+│   Database       │
+│  (PostgreSQL)    │
+│  - Prisma ORM    │
+└──────────────────┘
 ```
 
-### 2. Request Autenticado
+## 📁 Estructura de Carpetas
 
 ```
-Frontend → Request con Header: Authorization: Bearer <token>
-                    ↓
-                 Middleware authenticateToken
-                    ↓
-                 Valida JWT
-                    ↓
-                 Agrega req.user y req.userRole
-                    ↓
-                 Controller procesa request
-                    ↓
-                 Retorna respuesta
-```
-
-### 3. Creación de Turno
-
-```
-Paciente → Frontend → POST /api/turnos
-                    ↓
-                 Backend valida permisos
-                    ↓
-                 Verifica disponibilidad
-                    ↓
-                 Crea turno en BD
-                    ↓
-                 Crea notificaciones
-                    ↓
-                 Retorna turno creado
-```
-
-## 🗂️ Estructura de Carpetas Detallada
-
-### Backend
-
-```
-backend/
-├── prisma/
-│   ├── schema.prisma          # Modelo de datos
-│   ├── seed.js                # Datos iniciales
-│   └── migrations/            # Migraciones (generadas)
+Mediturnoscursor/
+├── backend/
+│   ├── prisma/
+│   │   └── schema.prisma          # Esquema de base de datos
+│   ├── src/
+│   │   ├── controllers/           # Lógica de negocio
+│   │   │   ├── auth.controller.js
+│   │   │   ├── turno.controller.js
+│   │   │   ├── paciente.controller.js
+│   │   │   ├── medico.controller.js
+│   │   │   └── disponibilidad.controller.js
+│   │   ├── routes/                # Rutas de API
+│   │   │   ├── auth.routes.js
+│   │   │   ├── turno.routes.js
+│   │   │   ├── paciente.routes.js
+│   │   │   └── medico.routes.js
+│   │   ├── middlewares/           # Middlewares
+│   │   │   ├── auth.middleware.js
+│   │   │   └── errorHandler.middleware.js
+│   │   ├── models/                # Modelos (si no usamos Prisma directamente)
+│   │   ├── utils/                 # Utilidades
+│   │   │   ├── jwt.js
+│   │   │   └── validators.js
+│   │   └── server.js              # Punto de entrada
+│   ├── .env                       # Variables de entorno
+│   ├── .gitignore
+│   └── package.json
 │
-├── src/
-│   ├── server.js              # Punto de entrada
-│   │
-│   ├── routes/                # Definición de rutas
-│   │   ├── auth.routes.js
-│   │   ├── turno.routes.js
-│   │   ├── paciente.routes.js
-│   │   ├── medico.routes.js
-│   │   ├── especialidad.routes.js
-│   │   ├── disponibilidad.routes.js
-│   │   ├── notaMedica.routes.js
-│   │   ├── notificacion.routes.js
-│   │   ├── estadistica.routes.js
-│   │   └── usuario.routes.js
-│   │
-│   ├── controllers/           # Lógica de negocio
-│   │   ├── auth.controller.js
-│   │   ├── turno.controller.js
-│   │   ├── paciente.controller.js
-│   │   ├── medico.controller.js
-│   │   ├── especialidad.controller.js
-│   │   ├── disponibilidad.controller.js
-│   │   ├── notaMedica.controller.js
-│   │   ├── notificacion.controller.js
-│   │   ├── estadistica.controller.js
-│   │   └── usuario.controller.js
-│   │
-│   └── middlewares/           # Middlewares
-│       ├── auth.middleware.js
-│       └── errorHandler.middleware.js
+├── frontend/
+│   ├── js/
+│   │   ├── api.js                 # Cliente API
+│   │   ├── auth.js                # Lógica de autenticación
+│   │   ├── dashboard.js           # Dashboard principal
+│   │   ├── turnos.js              # Gestión de turnos
+│   │   ├── pacientes.js           # Gestión de pacientes
+│   │   └── utils.js               # Utilidades frontend
+│   ├── landing.html               # Landing page (actual)
+│   ├── iniciado.html              # Dashboard (actual)
+│   └── styles.css                 # Estilos (actual)
 │
-├── package.json
-├── .env.example
-└── .gitignore
+├── .gitignore
+├── README.md
+└── package.json                   # Scripts generales
 ```
 
-### Frontend (Propuesta)
+## 🗄️ Modelo de Base de Datos
 
-```
-frontend/
-├── index.html                 # Landing page
-├── login.html                 # Página de login
-├── register.html              # Página de registro
-│
-├── dashboard/
-│   ├── paciente.html          # Dashboard paciente
-│   ├── medico.html            # Dashboard médico
-│   ├── secretario.html        # Dashboard secretario
-│   └── administrador.html    # Dashboard administrador
-│
-├── js/
-│   ├── api.js                 # Cliente API
-│   ├── auth.js                # Manejo de autenticación
-│   ├── utils.js               # Utilidades
-│   └── components/            # Componentes reutilizables
-│       ├── modal.js
-│       ├── table.js
-│       └── calendar.js
-│
-└── css/
-    ├── styles.css             # Estilos principales
-    └── components.css         # Estilos de componentes
-```
+### Entidades Principales:
 
-## 🔐 Sistema de Permisos
+1. **Usuario** (tabla base para todos los roles)
+   - id, email, password (hasheado), rol, createdAt, updatedAt
 
-### Matriz de Permisos
+2. **Paciente** (extiende Usuario)
+   - id, usuarioId, nombre, apellido, dni, fechaNacimiento, telefono, direccion
 
-| Recurso | Paciente | Médico | Secretario | Administrador |
-|---------|----------|--------|------------|---------------|
-| Ver sus turnos | ✅ | ❌ | ✅ | ✅ |
-| Ver todos los turnos | ❌ | ❌ | ✅ | ✅ |
-| Crear turno | ✅ | ❌ | ✅ | ✅ |
-| Cancelar su turno | ✅ | ❌ | ✅ | ✅ |
-| Ver pacientes | ❌ | ✅* | ✅ | ✅ |
-| Ver médicos | ✅ | ✅ | ✅ | ✅ |
-| Gestionar disponibilidad | ❌ | ✅ (propia) | ❌ | ✅ |
-| Crear nota médica | ❌ | ✅ | ❌ | ✅ |
-| Ver historial paciente | ❌ | ✅ | ❌ | ✅ |
-| Gestionar especialidades | ❌ | ❌ | ❌ | ✅ |
-| Gestionar usuarios | ❌ | ❌ | ❌ | ✅ |
+3. **Medico** (extiende Usuario)
+   - id, usuarioId, nombre, apellido, matricula, telefono
 
-*Médicos solo ven pacientes con turnos asignados a ellos
+4. **Secretario** (extiende Usuario)
+   - id, usuarioId, nombre, apellido
 
-## 📊 Modelo de Datos Relacional
+5. **Especialidad**
+   - id, nombre, descripcion
 
-```
-Usuario (1) ──┬── (1) Paciente
-              ├── (1) Médico ── (N) Disponibilidad
-              ├── (1) Secretario
-              └── (1) Administrador
+6. **MedicoEspecialidad** (relación muchos a muchos)
+   - medicoId, especialidadId
 
-Médico (1) ── (1) Especialidad
+7. **Disponibilidad**
+   - id, medicoId, diaSemana, horaInicio, horaFin, activo
 
-Turno (N) ── (1) Paciente
-Turno (N) ── (1) Médico
-Turno (N) ── (1) Especialidad
+8. **Turno**
+   - id, pacienteId, medicoId, fecha, hora, estado, motivoConsulta, createdAt
 
-Paciente (N) ── (N) Nota Médica ── (1) Médico
+9. **NotaMedica**
+   - id, turnoId, medicoId, contenido, fecha
 
-Usuario (1) ── (N) Notificación
-```
+10. **Notificacion**
+    - id, usuarioId, tipo, mensaje, leida, createdAt
 
-## 🚦 Flujo de Navegación
+## 🔐 Sistema de Autenticación
 
-### Usuario No Autenticado
-```
-Landing Page
-    ├── Login → Dashboard (según rol)
-    └── Register → Login → Dashboard
-```
+- **JWT Tokens**: Al iniciar sesión, se genera un token JWT
+- **Middleware de autenticación**: Verifica token en cada request protegido
+- **Roles**: Se validan en el middleware según el endpoint
 
-### Usuario Autenticado
-```
-Dashboard (según rol)
-    ├── Turnos
-    ├── Perfil
-    ├── Notificaciones
-    └── (Funcionalidades específicas del rol)
-```
+## 🛣️ Endpoints de la API
 
-## 🔄 Estados de Turno
+### Autenticación
+- `POST /api/auth/register` - Registro de paciente
+- `POST /api/auth/login` - Inicio de sesión
+- `GET /api/auth/me` - Obtener usuario actual
 
-```
-PENDIENTE → CONFIRMADO → COMPLETADO
-     │           │
-     └───────────┴──→ CANCELADO
-                    AUSENTE
-```
+### Turnos
+- `GET /api/turnos` - Listar turnos (filtros por rol)
+- `POST /api/turnos` - Crear turno
+- `PUT /api/turnos/:id` - Modificar turno
+- `DELETE /api/turnos/:id` - Cancelar turno
+- `GET /api/turnos/:id` - Obtener turno específico
 
-## 📱 Responsive Design
+### Pacientes
+- `GET /api/pacientes` - Listar pacientes (Secretario/Admin)
+- `GET /api/pacientes/:id` - Obtener paciente
+- `GET /api/pacientes/:id/historial` - Historial de turnos
 
-- **Desktop**: Layout completo con sidebar
-- **Tablet**: Sidebar colapsable
-- **Mobile**: Menú hamburguesa, cards en lugar de tablas
+### Médicos
+- `GET /api/medicos` - Listar médicos
+- `GET /api/medicos/:id` - Obtener médico
+- `GET /api/medicos/:id/disponibilidad` - Disponibilidad del médico
+- `POST /api/medicos` - Crear médico (Admin)
+- `PUT /api/medicos/:id` - Editar médico (Admin)
 
-## 🎨 Sistema de Diseño
+### Disponibilidad
+- `GET /api/disponibilidad/:medicoId` - Obtener disponibilidad
+- `POST /api/disponibilidad` - Crear disponibilidad (Médico)
+- `PUT /api/disponibilidad/:id` - Actualizar disponibilidad (Médico)
 
-### Colores
-- Primario: `#2563eb` (Azul)
-- Secundario: `#64748b` (Gris)
-- Éxito: `#10b981` (Verde)
-- Peligro: `#ef4444` (Rojo)
-- Advertencia: `#f59e0b` (Naranja)
+### Especialidades
+- `GET /api/especialidades` - Listar especialidades
+- `POST /api/especialidades` - Crear especialidad (Admin)
 
-### Tipografía
-- Fuente: Inter
-- Tamaños: xs, sm, base, lg, xl, 2xl, 3xl
+## 🎯 Flujo de Usuario por Rol
 
-### Componentes
-- Botones: primary, secondary, danger
-- Cards: con sombra y border-radius
-- Modales: overlay con blur
-- Formularios: inputs con validación visual
+### Paciente
+1. Registro → Login → Dashboard
+2. Buscar médicos → Ver disponibilidad → Reservar turno
+3. Ver mis turnos → Cancelar turno
 
-## 🔧 Configuración de Producción
+### Secretario
+1. Login → Dashboard
+2. Ver calendario global → Crear turno manual → Modificar turno
+3. Buscar pacientes → Ver datos de contacto
 
-### Variables de Entorno
+### Médico
+1. Login → Dashboard
+2. Ver agenda diaria → Ver paciente → Agregar nota médica
+3. Gestionar disponibilidad
 
-```env
-# Backend
-DATABASE_URL=postgresql://...
-JWT_SECRET=...
-NODE_ENV=production
-PORT=3000
-FRONTEND_URL=https://mediturnos.vercel.app
+### Administrador
+1. Login → Dashboard
+2. Gestionar médicos → Gestionar secretarios → Gestionar especialidades
+3. Ver estadísticas
 
-# Frontend
-API_BASE_URL=https://mediturnos-api.railway.app/api
-```
+## 🚀 Plan de Implementación
 
-### Optimizaciones
-
-- **Backend**: 
-  - Compresión de respuestas
-  - Rate limiting
-  - Caching de consultas frecuentes
-  - Logging estructurado
-
-- **Frontend**:
-  - Minificación de JS/CSS
-  - Lazy loading de imágenes
-  - Service Workers (PWA)
-  - Optimización de bundle
-
-## 📈 Escalabilidad
-
-### Horizontal
-- Múltiples instancias del backend
-- Load balancer
-- Base de datos con réplicas de lectura
-
-### Vertical
-- Optimización de consultas
-- Índices en BD
-- Caching (Redis)
-- CDN para assets estáticos
-
-## 🔍 Monitoreo y Logging
-
-- **Logging**: Winston o Pino
-- **Monitoreo**: Sentry para errores
-- **Métricas**: Prometheus + Grafana
-- **Health Checks**: Endpoint `/health`
-
-## 🧪 Testing
-
-### Backend
-- Unit tests: Jest
-- Integration tests: Supertest
-- E2E tests: Cypress
-
-### Frontend
-- Unit tests: Jest
-- E2E tests: Cypress
-
----
-
-**Documentación actualizada**: 2024
+1. ✅ Configurar proyecto y dependencias
+2. ✅ Crear esquema de base de datos (Prisma)
+3. ✅ Implementar autenticación (registro, login, JWT)
+4. ✅ Implementar CRUD de turnos
+5. ✅ Implementar gestión de pacientes
+6. ✅ Implementar gestión de médicos y disponibilidad
+7. ✅ Implementar frontend funcional
+8. ✅ Agregar validaciones y manejo de errores
+9. ✅ Preparar para despliegue
 

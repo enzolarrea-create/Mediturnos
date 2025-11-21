@@ -1,151 +1,56 @@
-import { PrismaClient } from '@prisma/client';
-import { validationResult } from 'express-validator';
-
-const prisma = new PrismaClient();
+import { prisma } from '../server.js';
 
 /**
- * Obtener notas médicas de un paciente
+ * Crear nota médica (Solo Médico)
  */
-export const getNotasPaciente = async (req, res, next) => {
+export const crearNotaMedica = async (req, res, next) => {
   try {
-    const { pacienteId } = req.params;
+    const { turnoId, contenido } = req.body;
+    const { rol, id: userId } = req.user;
 
-    // Verificar permisos: pacientes solo pueden ver sus propias notas
-    if (req.userRole === 'PACIENTE' && req.user.paciente?.id !== pacienteId) {
-      return res.status(403).json({ error: 'No tienes permisos para ver estas notas' });
+    if (rol !== 'MEDICO') {
+      return res.status(403).json({
+        error: 'Solo los médicos pueden crear notas médicas'
+      });
     }
 
-    const notas = await prisma.notaMedica.findMany({
-      where: { pacienteId },
-      include: {
-        medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
-          }
-        }
-      },
-      orderBy: { fecha: 'desc' }
+    if (!turnoId || !contenido) {
+      return res.status(400).json({
+        error: 'Turno ID y contenido son requeridos'
+      });
+    }
+
+    // Verificar que el turno existe y pertenece al médico
+    const turno = await prisma.turno.findUnique({
+      where: { id: turnoId },
+      include: { medico: true }
     });
 
-    res.json({ notas });
-  } catch (error) {
-    next(error);
-  }
-};
+    if (!turno) {
+      return res.status(404).json({ error: 'Turno no encontrado' });
+    }
 
-/**
- * Obtener nota médica por ID
- */
-export const getNotaById = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const nota = await prisma.notaMedica.findUnique({
-      where: { id },
-      include: {
-        paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            }
-          }
-        },
-        medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
-          }
-        }
-      }
+    const medico = await prisma.medico.findUnique({
+      where: { usuarioId: userId }
     });
 
-    if (!nota) {
-      return res.status(404).json({ error: 'Nota médica no encontrada' });
+    if (turno.medicoId !== medico?.id) {
+      return res.status(403).json({
+        error: 'Solo puedes agregar notas a tus propios turnos'
+      });
     }
 
-    // Verificar permisos
-    if (req.userRole === 'PACIENTE' && nota.pacienteId !== req.user.paciente?.id) {
-      return res.status(403).json({ error: 'No tienes permisos para ver esta nota' });
-    }
-
-    res.json(nota);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Crear nota médica
- */
-export const createNotaMedica = async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const {
-      pacienteId,
-      turnoId,
-      diagnostico,
-      tratamiento,
-      observaciones,
-      archivos
-    } = req.body;
-
-    // Si es médico, usar su propio ID
-    const medicoId = req.userRole === 'MEDICO' 
-      ? req.user.medico.id 
-      : req.body.medicoId;
-
-    if (!medicoId) {
-      return res.status(400).json({ error: 'ID de médico requerido' });
-    }
-
-    const nota = await prisma.notaMedica.create({
+    const notaMedica = await prisma.notaMedica.create({
       data: {
-        pacienteId,
-        medicoId,
         turnoId,
-        diagnostico,
-        tratamiento,
-        observaciones,
-        archivos: archivos ? JSON.stringify(archivos) : null
+        medicoId: medico.id,
+        contenido
       },
       include: {
-        paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            }
-          }
-        },
         medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
+          select: {
+            nombre: true,
+            apellido: true
           }
         }
       }
@@ -153,7 +58,7 @@ export const createNotaMedica = async (req, res, next) => {
 
     res.status(201).json({
       message: 'Nota médica creada exitosamente',
-      nota
+      notaMedica
     });
   } catch (error) {
     next(error);
@@ -161,95 +66,69 @@ export const createNotaMedica = async (req, res, next) => {
 };
 
 /**
- * Actualizar nota médica
+ * Obtener notas médicas de un turno
  */
-export const updateNotaMedica = async (req, res, next) => {
+export const obtenerNotasMedicas = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { diagnostico, tratamiento, observaciones, archivos } = req.body;
+    const { turnoId } = req.params;
+    const { rol, id: userId } = req.user;
 
-    const notaExistente = await prisma.notaMedica.findUnique({
-      where: { id }
-    });
-
-    if (!notaExistente) {
-      return res.status(404).json({ error: 'Nota médica no encontrada' });
-    }
-
-    // Verificar permisos: solo el médico que la creó o admin puede editarla
-    if (req.userRole === 'MEDICO' && notaExistente.medicoId !== req.user.medico?.id) {
-      return res.status(403).json({ error: 'No tienes permisos para editar esta nota' });
-    }
-
-    const nota = await prisma.notaMedica.update({
-      where: { id },
-      data: {
-        ...(diagnostico !== undefined && { diagnostico }),
-        ...(tratamiento !== undefined && { tratamiento }),
-        ...(observaciones !== undefined && { observaciones }),
-        ...(archivos !== undefined && { archivos: archivos ? JSON.stringify(archivos) : null })
-      },
+    // Verificar que el turno existe
+    const turno = await prisma.turno.findUnique({
+      where: { id: turnoId },
       include: {
         paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            }
-          }
+          include: { usuario: true }
         },
         medico: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true
-              }
-            },
-            especialidad: true
-          }
+          include: { usuario: true }
         }
       }
     });
 
-    res.json({
-      message: 'Nota médica actualizada exitosamente',
-      nota
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Eliminar nota médica
- */
-export const deleteNotaMedica = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const nota = await prisma.notaMedica.findUnique({
-      where: { id }
-    });
-
-    if (!nota) {
-      return res.status(404).json({ error: 'Nota médica no encontrada' });
+    if (!turno) {
+      return res.status(404).json({ error: 'Turno no encontrado' });
     }
 
     // Verificar permisos
-    if (req.userRole === 'MEDICO' && nota.medicoId !== req.user.medico?.id) {
-      return res.status(403).json({ error: 'No tienes permisos para eliminar esta nota' });
+    if (rol === 'PACIENTE') {
+      const paciente = await prisma.paciente.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (turno.pacienteId !== paciente?.id) {
+        return res.status(403).json({
+          error: 'Solo puedes ver notas de tus propios turnos'
+        });
+      }
     }
 
-    await prisma.notaMedica.delete({
-      where: { id }
+    if (rol === 'MEDICO') {
+      const medico = await prisma.medico.findUnique({
+        where: { usuarioId: userId }
+      });
+      if (turno.medicoId !== medico?.id) {
+        return res.status(403).json({
+          error: 'Solo puedes ver notas de tus propios turnos'
+        });
+      }
+    }
+
+    const notasMedicas = await prisma.notaMedica.findMany({
+      where: { turnoId },
+      include: {
+        medico: {
+          select: {
+            nombre: true,
+            apellido: true
+          }
+        }
+      },
+      orderBy: {
+        fecha: 'desc'
+      }
     });
 
-    res.json({
-      message: 'Nota médica eliminada exitosamente'
-    });
+    res.json({ notasMedicas });
   } catch (error) {
     next(error);
   }

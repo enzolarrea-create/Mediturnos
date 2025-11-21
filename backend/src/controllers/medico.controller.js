@@ -1,112 +1,72 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import bcrypt from 'bcryptjs';
+import { prisma } from '../server.js';
 
 /**
- * Obtener todos los médicos
+ * Listar médicos
  */
-export const getMedicos = async (req, res, next) => {
+export const listarMedicos = async (req, res, next) => {
   try {
-    const { especialidadId, activo, search, page = 1, limit = 20 } = req.query;
+    const { search, especialidadId } = req.query;
 
-    const where = {};
-
-    if (especialidadId) where.especialidadId = especialidadId;
-    if (activo !== undefined) where.activo = activo === 'true';
+    const where = {
+      activo: true,
+      usuario: {
+        activo: true
+      }
+    };
 
     if (search) {
-      where.usuario = {
-        OR: [
-          { nombre: { contains: search, mode: 'insensitive' } },
-          { apellido: { contains: search, mode: 'insensitive' } },
-          { matricula: { contains: search } }
-        ]
+      where.OR = [
+        { nombre: { contains: search, mode: 'insensitive' } },
+        { apellido: { contains: search, mode: 'insensitive' } },
+        { matricula: { contains: search } }
+      ];
+    }
+
+    if (especialidadId) {
+      where.especialidades = {
+        some: {
+          especialidadId
+        }
       };
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [medicos, total] = await Promise.all([
-      prisma.medico.findMany({
-        where,
-        include: {
-          usuario: {
-            select: {
-              id: true,
-              nombre: true,
-              apellido: true,
-              email: true,
-              telefono: true
-            }
-          },
-          especialidad: true
-        },
-        orderBy: {
-          usuario: {
-            apellido: 'asc'
-          }
-        },
-        skip,
-        take: parseInt(limit)
-      }),
-      prisma.medico.count({ where })
-    ]);
-
-    res.json({
-      medicos,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit))
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Obtener perfil del médico actual
- */
-export const getMiPerfil = async (req, res, next) => {
-  try {
-    if (req.userRole !== 'MEDICO') {
-      return res.status(403).json({ error: 'Solo los médicos pueden acceder a esta ruta' });
-    }
-
-    const medico = await prisma.medico.findUnique({
-      where: { usuarioId: req.userId },
+    const medicos = await prisma.medico.findMany({
+      where,
       include: {
         usuario: {
           select: {
             id: true,
-            email: true,
-            nombre: true,
-            apellido: true,
-            dni: true,
-            telefono: true,
-            direccion: true
+            email: true
           }
         },
-        especialidad: true
-      }
+        especialidades: {
+          include: {
+            especialidad: {
+              select: {
+                id: true,
+                nombre: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: [
+        { apellido: 'asc' },
+        { nombre: 'asc' }
+      ]
     });
 
-    if (!medico) {
-      return res.status(404).json({ error: 'Perfil de médico no encontrado' });
-    }
-
-    res.json(medico);
+    res.json({ medicos });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Obtener médico por ID
+ * Obtener un médico específico
  */
-export const getMedicoById = async (req, res, next) => {
+export const obtenerMedico = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -116,13 +76,30 @@ export const getMedicoById = async (req, res, next) => {
         usuario: {
           select: {
             id: true,
-            nombre: true,
-            apellido: true,
             email: true,
-            telefono: true
+            activo: true
           }
         },
-        especialidad: true
+        especialidades: {
+          include: {
+            especialidad: {
+              select: {
+                id: true,
+                nombre: true,
+                descripcion: true
+              }
+            }
+          }
+        },
+        disponibilidades: {
+          where: {
+            activo: true
+          },
+          orderBy: [
+            { diaSemana: 'asc' },
+            { horaInicio: 'asc' }
+          ]
+        }
       }
     });
 
@@ -130,93 +107,249 @@ export const getMedicoById = async (req, res, next) => {
       return res.status(404).json({ error: 'Médico no encontrado' });
     }
 
-    res.json(medico);
+    res.json({ medico });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Obtener turnos de un médico
+ * Crear un nuevo médico (Solo Admin)
  */
-export const getTurnosMedico = async (req, res, next) => {
+export const crearMedico = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { estado, fecha, fechaDesde, fechaHasta } = req.query;
+    const { email, password, nombre, apellido, matricula, telefono, especialidades } = req.body;
+    const { rol } = req.user;
 
-    const where = { medicoId: id };
-
-    if (estado) where.estado = estado;
-
-    if (fecha) {
-      const fechaInicio = new Date(fecha);
-      fechaInicio.setHours(0, 0, 0, 0);
-      const fechaFin = new Date(fecha);
-      fechaFin.setHours(23, 59, 59, 999);
-      where.fecha = {
-        gte: fechaInicio,
-        lte: fechaFin
-      };
-    } else if (fechaDesde || fechaHasta) {
-      where.fecha = {};
-      if (fechaDesde) {
-        where.fecha.gte = new Date(fechaDesde);
-      }
-      if (fechaHasta) {
-        const fechaFin = new Date(fechaHasta);
-        fechaFin.setHours(23, 59, 59, 999);
-        where.fecha.lte = fechaFin;
-      }
+    if (rol !== 'ADMINISTRADOR') {
+      return res.status(403).json({
+        error: 'Solo los administradores pueden crear médicos'
+      });
     }
 
-    const turnos = await prisma.turno.findMany({
-      where,
-      include: {
-        paciente: {
-          include: {
-            usuario: {
-              select: {
-                nombre: true,
-                apellido: true,
-                email: true,
-                telefono: true
-              }
-            }
-          }
-        },
-        especialidad: true
-      },
-      orderBy: [
-        { fecha: 'asc' },
-        { hora: 'asc' }
-      ]
+    if (!email || !password || !nombre || !apellido || !matricula) {
+      return res.status(400).json({
+        error: 'Faltan campos requeridos',
+        required: ['email', 'password', 'nombre', 'apellido', 'matricula']
+      });
+    }
+
+    // Verificar email único
+    const emailExists = await prisma.usuario.findUnique({
+      where: { email }
     });
 
-    res.json({ turnos });
+    if (emailExists) {
+      return res.status(409).json({ error: 'El email ya está registrado' });
+    }
+
+    // Verificar matrícula única
+    const matriculaExists = await prisma.medico.findUnique({
+      where: { matricula }
+    });
+
+    if (matriculaExists) {
+      return res.status(409).json({ error: 'La matrícula ya está registrada' });
+    }
+
+    // Hashear contraseña
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Crear usuario y médico en transacción
+    const result = await prisma.$transaction(async (tx) => {
+      const usuario = await tx.usuario.create({
+        data: {
+          email,
+          password: hashedPassword,
+          rol: 'MEDICO'
+        }
+      });
+
+      const medico = await tx.medico.create({
+        data: {
+          usuarioId: usuario.id,
+          nombre,
+          apellido,
+          matricula,
+          telefono: telefono || null
+        }
+      });
+
+      // Asignar especialidades si se proporcionaron
+      if (especialidades && especialidades.length > 0) {
+        await tx.medicoEspecialidad.createMany({
+          data: especialidades.map(especialidadId => ({
+            medicoId: medico.id,
+            especialidadId
+          }))
+        });
+      }
+
+      return { usuario, medico };
+    });
+
+    const medicoCompleto = await prisma.medico.findUnique({
+      where: { id: result.medico.id },
+      include: {
+        usuario: {
+          select: {
+            id: true,
+            email: true,
+            rol: true
+          }
+        },
+        especialidades: {
+          include: {
+            especialidad: true
+          }
+        }
+      }
+    });
+
+    res.status(201).json({
+      message: 'Médico creado exitosamente',
+      medico: medicoCompleto
+    });
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * Obtener disponibilidad de un médico
+ * Actualizar un médico (Solo Admin)
  */
-export const getDisponibilidadMedico = async (req, res, next) => {
+export const actualizarMedico = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { nombre, apellido, telefono, activo, especialidades } = req.body;
+    const { rol } = req.user;
 
-    const disponibilidad = await prisma.disponibilidad.findMany({
-      where: {
-        medicoId: id,
-        activa: true
-      },
-      orderBy: [
-        { diaSemana: 'asc' },
-        { horaInicio: 'asc' }
-      ]
+    if (rol !== 'ADMINISTRADOR') {
+      return res.status(403).json({
+        error: 'Solo los administradores pueden actualizar médicos'
+      });
+    }
+
+    const medico = await prisma.medico.findUnique({
+      where: { id }
     });
 
-    res.json({ disponibilidad });
+    if (!medico) {
+      return res.status(404).json({ error: 'Médico no encontrado' });
+    }
+
+    // Actualizar datos básicos
+    const medicoActualizado = await prisma.medico.update({
+      where: { id },
+      data: {
+        ...(nombre && { nombre }),
+        ...(apellido && { apellido }),
+        ...(telefono !== undefined && { telefono }),
+        ...(activo !== undefined && { activo })
+      },
+      include: {
+        usuario: {
+          select: {
+            id: true,
+            email: true,
+            activo: true
+          }
+        },
+        especialidades: {
+          include: {
+            especialidad: true
+          }
+        }
+      }
+    });
+
+    // Actualizar especialidades si se proporcionaron
+    if (especialidades) {
+      // Eliminar especialidades actuales
+      await prisma.medicoEspecialidad.deleteMany({
+        where: { medicoId: id }
+      });
+
+      // Agregar nuevas especialidades
+      if (especialidades.length > 0) {
+        await prisma.medicoEspecialidad.createMany({
+          data: especialidades.map(especialidadId => ({
+            medicoId: id,
+            especialidadId
+          }))
+        });
+      }
+
+      // Recargar con especialidades actualizadas
+      const medicoConEspecialidades = await prisma.medico.findUnique({
+        where: { id },
+        include: {
+          usuario: {
+            select: {
+              id: true,
+              email: true,
+              activo: true
+            }
+          },
+          especialidades: {
+            include: {
+              especialidad: true
+            }
+          }
+        }
+      });
+
+      return res.json({
+        message: 'Médico actualizado exitosamente',
+        medico: medicoConEspecialidades
+      });
+    }
+
+    res.json({
+      message: 'Médico actualizado exitosamente',
+      medico: medicoActualizado
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Eliminar un médico (Solo Admin) - Soft delete
+ */
+export const eliminarMedico = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rol } = req.user;
+
+    if (rol !== 'ADMINISTRADOR') {
+      return res.status(403).json({
+        error: 'Solo los administradores pueden eliminar médicos'
+      });
+    }
+
+    const medico = await prisma.medico.findUnique({
+      where: { id },
+      include: { usuario: true }
+    });
+
+    if (!medico) {
+      return res.status(404).json({ error: 'Médico no encontrado' });
+    }
+
+    // Soft delete: desactivar médico y usuario
+    await prisma.$transaction([
+      prisma.medico.update({
+        where: { id },
+        data: { activo: false }
+      }),
+      prisma.usuario.update({
+        where: { id: medico.usuarioId },
+        data: { activo: false }
+      })
+    ]);
+
+    res.json({ message: 'Médico eliminado exitosamente' });
   } catch (error) {
     next(error);
   }
