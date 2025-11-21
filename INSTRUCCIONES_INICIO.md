@@ -11,37 +11,94 @@ cd backend
 npm install
 ```
 
-### 2. Configurar Base de Datos
+### 2. Configurar Base de Datos con Supabase
 
-#### Opción A: PostgreSQL Local
+**📖 Guía detallada:** Si necesitas más ayuda, consulta `GUIA_SUPABASE.md`
 
-1. Instala PostgreSQL si no lo tienes
-2. Crea una base de datos:
-```sql
-CREATE DATABASE mediturnos;
-```
+**Resumen rápido:**
 
-3. Copia el archivo de ejemplo:
+1. **Crear cuenta y proyecto:**
+   - Ve a [https://supabase.com](https://supabase.com)
+   - Crea una cuenta (puedes usar GitHub)
+   - Clic en "New Project"
+   - Name: `mediturnos`
+   - Crea una contraseña segura (¡GUÁRDALA!)
+   - Plan: Free
+   - Espera 1-2 minutos
+
+2. **Obtener Connection String:**
+   - Settings → Database → Connection string
+   - Pestaña "URI"
+   - Copia la URL
+   - **IMPORTANTE**: Reemplaza `[YOUR-PASSWORD]` con tu contraseña real
+
+3. **Configurar en el proyecto:**
+   ```bash
+   cd backend
+   cp .env.example .env
+   ```
+
+4. **Editar `.env`:**
+   ```env
+   DATABASE_URL="postgresql://postgres.xxxxx:TU_PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+   JWT_SECRET="genera-un-secret-aleatorio"
+   JWT_EXPIRES_IN="7d"
+   PORT=3000
+   NODE_ENV=development
+   FRONTEND_URL="http://localhost:5500"
+   ```
+
+5. **Generar JWT_SECRET:**
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+   Copia el resultado y pégalo como valor de `JWT_SECRET`
+
+#### Alternativa: PostgreSQL Local
+
+Si prefieres usar PostgreSQL local:
+
+**Paso 1: Crear cuenta y proyecto en Supabase**
+
+1. Ve a [https://supabase.com](https://supabase.com)
+2. Haz clic en "Start your project" o "Sign in" si ya tienes cuenta
+3. Crea una cuenta (puedes usar GitHub, Google, etc.)
+4. Una vez dentro, haz clic en "New Project"
+5. Completa el formulario:
+   - **Name**: `mediturnos` (o el nombre que prefieras)
+   - **Database Password**: Crea una contraseña segura (¡GUÁRDALA BIEN!)
+   - **Region**: Elige la más cercana a tu ubicación
+   - **Pricing Plan**: Free (gratis, perfecto para desarrollo)
+6. Haz clic en "Create new project"
+7. Espera 1-2 minutos mientras Supabase crea tu base de datos
+
+**Paso 2: Obtener la Connection String**
+
+1. Una vez que el proyecto esté listo, ve a la sección "Settings" (⚙️) en el menú lateral
+2. Haz clic en "Database" en el submenú
+3. Baja hasta la sección "Connection string"
+4. Selecciona la pestaña "URI"
+5. Copia la connection string (se ve así: `postgresql://postgres:[YOUR-PASSWORD]@db.xxxxx.supabase.co:5432/postgres`)
+6. **IMPORTANTE**: Reemplaza `[YOUR-PASSWORD]` con la contraseña que creaste en el Paso 1
+   - Ejemplo: Si tu contraseña es `miPassword123`, la URL debería ser:
+   - `postgresql://postgres:miPassword123@db.xxxxx.supabase.co:5432/postgres`
+
+**Paso 3: Configurar en tu proyecto**
+
+1. En tu proyecto, copia el archivo de ejemplo:
 ```bash
+cd backend
 cp .env.example .env
 ```
 
-4. Edita `.env` con tus credenciales:
+2. Abre el archivo `.env` y pega tu connection string:
 ```env
-DATABASE_URL="postgresql://usuario:password@localhost:5432/mediturnos?schema=public"
-JWT_SECRET="cambiar-por-un-secret-aleatorio-y-seguro"
-JWT_EXPIRES_IN="7d"
-PORT=3000
-NODE_ENV=development
-FRONTEND_URL="http://localhost:5500"
+DATABASE_URL="postgresql://postgres:TU_PASSWORD@db.xxxxx.supabase.co:5432/postgres?pgbouncer=true&connection_limit=1"
 ```
 
-#### Opción B: PostgreSQL en la Nube (Recomendado para empezar rápido)
-
-1. Crea una cuenta gratuita en [Supabase](https://supabase.com) o [Neon](https://neon.tech)
-2. Crea un nuevo proyecto
-3. Copia la connection string
-4. Pégala en tu archivo `.env` como `DATABASE_URL`
+**Nota importante sobre Supabase:**
+- Supabase usa un pooler de conexiones, por lo que es recomendable agregar `?pgbouncer=true&connection_limit=1` al final de la URL
+- Si tienes problemas, también puedes usar la "Connection string" de la pestaña "Session mode" en lugar de "URI"
 
 ### 3. Ejecutar Migraciones
 
@@ -115,9 +172,10 @@ npm run prisma:generate
 
 ### Error: "P1001: Can't reach database server"
 
-- Verifica que PostgreSQL esté corriendo
-- Verifica que `DATABASE_URL` en `.env` sea correcta
-- Si usas Supabase/Neon, verifica que la URL sea la correcta
+- Verifica que la contraseña en `DATABASE_URL` sea correcta (reemplaza `[YOUR-PASSWORD]`)
+- Verifica que no haya espacios extra en la URL
+- Si usas Supabase, verifica que tu proyecto esté activo
+- Prueba agregar `?pgbouncer=true&connection_limit=1` al final de la URL de Supabase
 
 ### Error: "CORS policy"
 
