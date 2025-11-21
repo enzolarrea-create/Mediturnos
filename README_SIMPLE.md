@@ -4,11 +4,12 @@ Versión ultra-simplificada del sistema de gestión de turnos médicos, perfecta
 
 ## ✨ Características
 
-- ✅ **Sin Prisma** - SQLite directo con better-sqlite3
-- ✅ **Sin migraciones** - Las tablas se crean automáticamente
+- ✅ **Sin Prisma** - Base de datos JSON simple
+- ✅ **Sin compilación** - No requiere Python ni herramientas nativas
+- ✅ **Sin migraciones** - Los datos se guardan directamente en JSON
 - ✅ **Sin JWT complejo** - Sesiones simples con express-session
 - ✅ **Sin configuración complicada** - Todo funciona por defecto
-- ✅ **Base de datos local** - Un solo archivo SQLite
+- ✅ **Base de datos local** - Un solo archivo JSON
 
 ## 🚀 Inicio Rápido
 
@@ -45,9 +46,9 @@ Luego: `http://localhost:5500/landing.html`
 ```
 backend-simple/
 ├── server.js          # Servidor Express
-├── database.js        # Configuración SQLite
-├── seed.js            # Datos de ejemplo
-└── database.sqlite    # Base de datos (se crea automáticamente)
+├── database-json.js   # Base de datos JSON
+├── seed-json.js       # Datos de ejemplo
+└── database.json      # Archivo de datos (se crea automáticamente)
 
 frontend-simple/
 ├── js/
@@ -89,9 +90,10 @@ frontend-simple/
 
 ## 📝 Notas
 
-- La base de datos se crea automáticamente al iniciar el servidor
+- La base de datos JSON se crea automáticamente al iniciar el servidor
+- No requiere compilación ni Python (funciona inmediatamente)
 - Las sesiones se guardan en memoria (se pierden al reiniciar)
-- No requiere configuración de base de datos externa
+- Los datos se guardan en un archivo JSON simple
 - Todo funciona con valores por defecto
 
 ## 🐛 Solución de Problemas

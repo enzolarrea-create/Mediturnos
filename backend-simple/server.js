@@ -5,7 +5,7 @@
 const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
-const db = require('./database');
+const db = require('./database-json');
 
 const app = express();
 const PORT = 3000;
@@ -49,7 +49,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // Verificar si el email ya existe
-    const existing = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+    const existing = db.getUsuarioByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'El email ya está registrado' });
     }
@@ -59,14 +59,20 @@ app.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Crear usuario
-    const result = db.prepare(`
-      INSERT INTO usuarios (email, password, rol, nombre, apellido, dni, telefono)
-      VALUES (?, ?, 'PACIENTE', ?, ?, ?, ?)
-    `).run(email, hashedPassword, nombre, apellido, dni, telefono || null);
+    const usuario = db.createUsuario({
+      email,
+      password: hashedPassword,
+      rol: 'PACIENTE',
+      nombre,
+      apellido,
+      dni,
+      telefono: telefono || null,
+      activo: true
+    });
 
     res.json({ 
       message: 'Usuario registrado exitosamente',
-      userId: result.lastInsertRowid 
+      userId: usuario.id 
     });
   } catch (error) {
     console.error('Error en registro:', error);
@@ -84,9 +90,9 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Buscar usuario
-    const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(email);
+    const user = db.getUsuarioByEmail(email);
     
-    if (!user) {
+    if (!user || user.activo === false) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
@@ -107,7 +113,7 @@ app.post('/api/auth/login', async (req, res) => {
     delete userData.password;
 
     if (user.rol === 'MEDICO') {
-      const medico = db.prepare('SELECT * FROM medicos WHERE usuario_id = ?').get(user.id);
+      const medico = db.getMedicoByUsuarioId(user.id);
       userData.medico = medico;
     }
 
@@ -130,13 +136,23 @@ app.post('/api/auth/logout', (req, res) => {
 // Obtener usuario actual
 app.get('/api/auth/me', requireAuth, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, email, rol, nombre, apellido, dni, telefono FROM usuarios WHERE id = ?').get(req.session.userId);
+    const user = db.getUsuario(req.session.userId);
     
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    res.json({ user });
+    const userData = {
+      id: user.id,
+      email: user.email,
+      rol: user.rol,
+      nombre: user.nombre,
+      apellido: user.apellido,
+      dni: user.dni,
+      telefono: user.telefono
+    };
+
+    res.json({ user: userData });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener usuario' });
   }
@@ -148,47 +164,23 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 app.get('/api/turnos', requireAuth, (req, res) => {
   try {
     const { fecha, medicoId, pacienteId } = req.query;
-    let query = `
-      SELECT t.*, 
-             p.nombre as paciente_nombre, p.apellido as paciente_apellido, p.dni as paciente_dni,
-             m.nombre as medico_nombre, m.apellido as medico_apellido,
-             med.matricula
-      FROM turnos t
-      JOIN usuarios p ON t.paciente_id = p.id
-      JOIN medicos med ON t.medico_id = med.id
-      JOIN usuarios m ON med.usuario_id = m.id
-      WHERE 1=1
-    `;
-    const params = [];
+    const filtros = {};
 
     // Filtros según rol
     if (req.session.userRol === 'PACIENTE') {
-      query += ' AND t.paciente_id = ?';
-      params.push(req.session.userId);
+      filtros.paciente_id = req.session.userId;
     } else if (req.session.userRol === 'MEDICO') {
-      const medico = db.prepare('SELECT id FROM medicos WHERE usuario_id = ?').get(req.session.userId);
+      const medico = db.getMedicoByUsuarioId(req.session.userId);
       if (medico) {
-        query += ' AND t.medico_id = ?';
-        params.push(medico.id);
+        filtros.medico_id = medico.id;
       }
     }
 
-    if (fecha) {
-      query += ' AND t.fecha = ?';
-      params.push(fecha);
-    }
-    if (medicoId) {
-      query += ' AND t.medico_id = ?';
-      params.push(medicoId);
-    }
-    if (pacienteId) {
-      query += ' AND t.paciente_id = ?';
-      params.push(pacienteId);
-    }
+    if (fecha) filtros.fecha = fecha;
+    if (medicoId) filtros.medico_id = parseInt(medicoId);
+    if (pacienteId) filtros.paciente_id = parseInt(pacienteId);
 
-    query += ' ORDER BY t.fecha, t.hora';
-
-    const turnos = db.prepare(query).all(...params);
+    const turnos = db.getTurnos(filtros);
     res.json({ turnos });
   } catch (error) {
     console.error('Error al listar turnos:', error);
@@ -213,23 +205,27 @@ app.post('/api/turnos', requireAuth, async (req, res) => {
     }
 
     // Verificar que no haya conflicto
-    const conflicto = db.prepare(`
-      SELECT id FROM turnos 
-      WHERE medico_id = ? AND fecha = ? AND hora = ? AND estado != 'CANCELADO'
-    `).get(medicoId, fecha, hora);
+    const turnosExistentes = db.getTurnos({ medico_id: parseInt(medicoId), fecha });
+    const conflicto = turnosExistentes.find(t => 
+      t.hora === hora && t.estado !== 'CANCELADO'
+    );
 
     if (conflicto) {
       return res.status(409).json({ error: 'Ya existe un turno en ese horario' });
     }
 
-    const result = db.prepare(`
-      INSERT INTO turnos (paciente_id, medico_id, fecha, hora, estado, motivo_consulta)
-      VALUES (?, ?, ?, ?, 'PENDIENTE', ?)
-    `).run(pacienteId, medicoId, fecha, hora, motivoConsulta || null);
+    const turno = db.createTurno({
+      paciente_id: parseInt(pacienteId),
+      medico_id: parseInt(medicoId),
+      fecha,
+      hora,
+      estado: 'PENDIENTE',
+      motivo_consulta: motivoConsulta || null
+    });
 
     res.status(201).json({ 
       message: 'Turno creado exitosamente',
-      turnoId: result.lastInsertRowid
+      turnoId: turno.id
     });
   } catch (error) {
     console.error('Error al crear turno:', error);
@@ -243,7 +239,9 @@ app.delete('/api/turnos/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verificar permisos
-    const turno = db.prepare('SELECT * FROM turnos WHERE id = ?').get(id);
+    const turnos = db.getTurnos();
+    const turno = turnos.find(t => t.id === parseInt(id));
+    
     if (!turno) {
       return res.status(404).json({ error: 'Turno no encontrado' });
     }
@@ -252,7 +250,7 @@ app.delete('/api/turnos/:id', requireAuth, (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
-    db.prepare('UPDATE turnos SET estado = ? WHERE id = ?').run('CANCELADO', id);
+    db.updateTurno(parseInt(id), { estado: 'CANCELADO' });
     res.json({ message: 'Turno cancelado exitosamente' });
   } catch (error) {
     res.status(500).json({ error: 'Error al cancelar turno' });
@@ -264,12 +262,7 @@ app.delete('/api/turnos/:id', requireAuth, (req, res) => {
 // Listar médicos
 app.get('/api/medicos', (req, res) => {
   try {
-    const medicos = db.prepare(`
-      SELECT m.*, u.nombre, u.apellido, u.email, u.telefono
-      FROM medicos m
-      JOIN usuarios u ON m.usuario_id = u.id
-      WHERE u.activo = 1
-    `).all();
+    const medicos = db.getMedicos();
     res.json({ medicos });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener médicos' });
@@ -285,11 +278,14 @@ app.get('/api/pacientes', requireAuth, (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
-    const pacientes = db.prepare(`
-      SELECT id, nombre, apellido, dni, telefono, email
-      FROM usuarios
-      WHERE rol = 'PACIENTE' AND activo = 1
-    `).all();
+    const pacientes = db.getUsuariosByRol('PACIENTE').map(u => ({
+      id: u.id,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      dni: u.dni,
+      telefono: u.telefono,
+      email: u.email
+    }));
     res.json({ pacientes });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener pacientes' });
@@ -300,7 +296,7 @@ app.get('/api/pacientes', requireAuth, (req, res) => {
 
 app.get('/api/especialidades', (req, res) => {
   try {
-    const especialidades = db.prepare('SELECT * FROM especialidades').all();
+    const especialidades = db.getEspecialidades();
     res.json({ especialidades });
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener especialidades' });
@@ -318,4 +314,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });
+
 

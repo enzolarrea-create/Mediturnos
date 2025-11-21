@@ -9,7 +9,13 @@ cd backend-simple
 npm install
 ```
 
-### 2. Iniciar el servidor
+### 2. (Opcional) Poblar con datos de ejemplo
+
+```bash
+npm run seed
+```
+
+### 3. Iniciar el servidor
 
 ```bash
 npm start
@@ -17,9 +23,9 @@ npm start
 
 El servidor estará en `http://localhost:3000`
 
-**¡Eso es todo!** La base de datos SQLite se crea automáticamente.
+**¡Eso es todo!** La base de datos JSON se crea automáticamente en `database.json`.
 
-### 3. Abrir el frontend
+### 4. Abrir el frontend
 
 Abre `landing.html` en tu navegador o usa un servidor simple:
 
@@ -39,9 +45,10 @@ Luego abre: `http://localhost:5500/landing.html`
 Mediturnoscursor/
 ├── backend-simple/
 │   ├── server.js          # Servidor Express
-│   ├── database.js        # Configuración SQLite
+│   ├── database-json.js   # Base de datos JSON
+│   ├── seed-json.js       # Datos de ejemplo
 │   ├── package.json
-│   └── database.sqlite    # Base de datos (se crea automáticamente)
+│   └── database.json      # Archivo de datos (se crea automáticamente)
 │
 └── frontend-simple/
     ├── js/
@@ -88,10 +95,11 @@ bcrypt.hash('password123', 10).then(console.log);
 
 ## 📝 Notas Importantes
 
-1. **Base de datos**: Se crea automáticamente en `backend-simple/database.sqlite`
-2. **Sesiones**: Se guardan en memoria (se pierden al reiniciar el servidor)
-3. **Sin migraciones**: Las tablas se crean automáticamente al iniciar
-4. **Sin configuración compleja**: Todo funciona con valores por defecto
+1. **Base de datos**: Se crea automáticamente en `backend-simple/database.json` (archivo JSON simple)
+2. **Sin compilación**: No requiere Python ni herramientas de compilación
+3. **Sesiones**: Se guardan en memoria (se pierden al reiniciar el servidor)
+4. **Sin migraciones**: Los datos se guardan directamente en JSON
+5. **Sin configuración compleja**: Todo funciona con valores por defecto
 
 ## 🐛 Solución de Problemas
 

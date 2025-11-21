@@ -1,34 +1,16 @@
 {
   "name": "mediturnos-backend",
   "version": "1.0.0",
-  "description": "Backend API para sistema de gestión de turnos médicos",
-  "main": "src/server.js",
-  "type": "module",
-  "prisma": {
-    "seed": "node prisma/seed.js"
-  },
+  "main": "server.js",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio",
-    "prisma:seed": "node --experimental-modules prisma/seed.js"
+    "start": "node server.js"
   },
-  "keywords": ["medical", "appointments", "api"],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "@prisma/client": "^5.7.1",
-    "express-validator": "^7.0.1"
-  },
-  "devDependencies": {
-    "prisma": "^5.7.1"
+    "express-session": "^1.17.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
   }
 }
-

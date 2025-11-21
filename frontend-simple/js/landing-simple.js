@@ -52,7 +52,8 @@ window.handleLogin = async function(event) {
     alert('Inicio de sesión exitoso');
     window.location.href = '/iniciado.html';
   } catch (error) {
-    alert(error.message || 'Error al iniciar sesión');
+    console.error('Error de login:', error);
+    alert(error.message || 'Error al iniciar sesión. Verifica que el backend esté corriendo en http://localhost:3000');
   }
 };
 

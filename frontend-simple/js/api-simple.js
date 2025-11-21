@@ -23,15 +23,19 @@ async function apiRequest(endpoint, options = {}) {
 
   try {
     const response = await fetch(url, config);
-    const data = await response.json();
-
+    
     if (!response.ok) {
-      throw new Error(data.error || 'Error en la petición');
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
     }
-
+    
+    const data = await response.json();
     return data;
   } catch (error) {
     console.error('API Error:', error);
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      throw new Error('No se pudo conectar al servidor. Verifica que el backend esté corriendo en http://localhost:3000');
+    }
     throw error;
   }
 }
