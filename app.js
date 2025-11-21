@@ -129,11 +129,9 @@ function handleLogin(event) {
 /**
  * Formatea el DNI mientras el usuario escribe
  * Formato: xx.xxx.xxx (ej: 12.345.678)
+ * SOLO permite números y formatea automáticamente
  */
 function formatDNI(input) {
-    // Guardar posición del cursor
-    const cursorPosition = input.selectionStart;
-    
     // Obtener solo números
     let value = input.value.replace(/\D/g, '');
     
@@ -154,39 +152,76 @@ function formatDNI(input) {
         }
     }
     
+    // Guardar posición del cursor antes de cambiar el valor
+    const cursorBefore = input.selectionStart;
+    const valueBefore = input.value;
+    const numbersBefore = valueBefore.replace(/\D/g, '').length;
+    
+    // Actualizar valor
     input.value = formatted;
     
-    // Restaurar posición del cursor (ajustada por los puntos agregados)
-    let newCursorPosition = cursorPosition;
-    const beforeCursor = input.value.substring(0, cursorPosition).replace(/\D/g, '').length;
-    const formattedBeforeCursor = formatDNIValue(beforeCursor);
-    newCursorPosition = formattedBeforeCursor.length;
+    // Calcular nueva posición del cursor
+    const numbersAfter = value.length;
+    let newCursorPos = 0;
     
-    input.setSelectionRange(newCursorPosition, newCursorPosition);
+    if (numbersAfter <= 2) {
+        newCursorPos = numbersAfter;
+    } else if (numbersAfter <= 5) {
+        newCursorPos = numbersAfter + 1; // +1 por el punto
+    } else {
+        newCursorPos = numbersAfter + 2; // +2 por los dos puntos
+    }
+    
+    // Ajustar posición si el usuario está borrando
+    if (numbersAfter < numbersBefore) {
+        // El usuario está borrando, mantener posición relativa
+        const diff = numbersBefore - numbersAfter;
+        newCursorPos = Math.max(0, cursorBefore - diff);
+    } else {
+        // El usuario está escribiendo, avanzar según los puntos
+        if (numbersAfter === 3 && numbersBefore === 2) {
+            newCursorPos = 4; // Después del primer punto
+        } else if (numbersAfter === 6 && numbersBefore === 5) {
+            newCursorPos = 7; // Después del segundo punto
+        }
+    }
+    
+    // Asegurar que el cursor no esté en una posición inválida (sobre un punto)
+    if (newCursorPos < formatted.length && formatted[newCursorPos] === '.') {
+        newCursorPos++;
+    }
+    
+    input.setSelectionRange(newCursorPos, newCursorPos);
 }
 
 /**
- * Función auxiliar para formatear DNI sin modificar el input
+ * Previene que se ingresen caracteres no numéricos en el campo DNI
  */
-function formatDNIValue(value) {
-    const numbers = value.replace(/\D/g, '').substring(0, 8);
-    if (numbers.length <= 2) {
-        return numbers;
-    } else if (numbers.length <= 5) {
-        return numbers.substring(0, 2) + '.' + numbers.substring(2);
-    } else {
-        return numbers.substring(0, 2) + '.' + numbers.substring(2, 5) + '.' + numbers.substring(5);
+function preventNonNumericDNI(e) {
+    // Permitir teclas de control (backspace, delete, tab, etc.)
+    if (e.ctrlKey || e.metaKey || e.key === 'Backspace' || e.key === 'Delete' || 
+        e.key === 'Tab' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') {
+        return;
+    }
+    
+    // Permitir pegar (se manejará en el evento paste)
+    if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+        return;
+    }
+    
+    // Solo permitir números
+    if (!/^\d$/.test(e.key)) {
+        e.preventDefault();
     }
 }
 
 /**
  * Formatea la fecha de nacimiento mientras el usuario escribe
  * Formato: dd/mm/yyyy (ej: 01/06/2005)
+ * SOLO permite números y formatea automáticamente
  */
 function formatFecha(input) {
-    // Guardar posición del cursor
-    const cursorPosition = input.selectionStart;
-    
     // Obtener solo números
     let value = input.value.replace(/\D/g, '');
     
@@ -207,28 +242,67 @@ function formatFecha(input) {
         }
     }
     
+    // Guardar posición del cursor antes de cambiar el valor
+    const cursorBefore = input.selectionStart;
+    const valueBefore = input.value;
+    const numbersBefore = valueBefore.replace(/\D/g, '').length;
+    
+    // Actualizar valor
     input.value = formatted;
     
-    // Restaurar posición del cursor (ajustada por las barras agregadas)
-    let newCursorPosition = cursorPosition;
-    const beforeCursor = input.value.substring(0, cursorPosition).replace(/\D/g, '').length;
-    const formattedBeforeCursor = formatFechaValue(beforeCursor);
-    newCursorPosition = formattedBeforeCursor.length;
+    // Calcular nueva posición del cursor
+    const numbersAfter = value.length;
+    let newCursorPos = 0;
     
-    input.setSelectionRange(newCursorPosition, newCursorPosition);
+    if (numbersAfter <= 2) {
+        newCursorPos = numbersAfter;
+    } else if (numbersAfter <= 4) {
+        newCursorPos = numbersAfter + 1; // +1 por la barra
+    } else {
+        newCursorPos = numbersAfter + 2; // +2 por las dos barras
+    }
+    
+    // Ajustar posición si el usuario está borrando
+    if (numbersAfter < numbersBefore) {
+        // El usuario está borrando, mantener posición relativa
+        const diff = numbersBefore - numbersAfter;
+        newCursorPos = Math.max(0, cursorBefore - diff);
+    } else {
+        // El usuario está escribiendo, avanzar según las barras
+        if (numbersAfter === 3 && numbersBefore === 2) {
+            newCursorPos = 4; // Después de la primera barra
+        } else if (numbersAfter === 5 && numbersBefore === 4) {
+            newCursorPos = 6; // Después de la segunda barra
+        }
+    }
+    
+    // Asegurar que el cursor no esté en una posición inválida (sobre una barra)
+    if (newCursorPos < formatted.length && formatted[newCursorPos] === '/') {
+        newCursorPos++;
+    }
+    
+    input.setSelectionRange(newCursorPos, newCursorPos);
 }
 
 /**
- * Función auxiliar para formatear fecha sin modificar el input
+ * Previene que se ingresen caracteres no numéricos en el campo Fecha
  */
-function formatFechaValue(value) {
-    const numbers = value.replace(/\D/g, '').substring(0, 8);
-    if (numbers.length <= 2) {
-        return numbers;
-    } else if (numbers.length <= 4) {
-        return numbers.substring(0, 2) + '/' + numbers.substring(2);
-    } else {
-        return numbers.substring(0, 2) + '/' + numbers.substring(2, 4) + '/' + numbers.substring(4);
+function preventNonNumericFecha(e) {
+    // Permitir teclas de control (backspace, delete, tab, etc.)
+    if (e.ctrlKey || e.metaKey || e.key === 'Backspace' || e.key === 'Delete' || 
+        e.key === 'Tab' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') {
+        return;
+    }
+    
+    // Permitir pegar (se manejará en el evento paste)
+    if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+        return;
+    }
+    
+    // Solo permitir números
+    if (!/^\d$/.test(e.key)) {
+        e.preventDefault();
     }
 }
 
@@ -1175,30 +1249,50 @@ document.addEventListener('DOMContentLoaded', () => {
         // Formateo automático de DNI
         const dniInput = document.getElementById('regDNI');
         if (dniInput) {
+            // Prevenir letras al escribir
+            dniInput.addEventListener('keydown', preventNonNumericDNI);
+            
+            // Formatear mientras escribe
             dniInput.addEventListener('input', (e) => {
                 formatDNI(e.target);
             });
             
-            // Prevenir pegar texto no numérico
+            // Manejar pegado de texto
             dniInput.addEventListener('paste', (e) => {
                 e.preventDefault();
                 const paste = (e.clipboardData || window.clipboardData).getData('text');
                 const numbers = paste.replace(/\D/g, '').substring(0, 8);
+                
+                // Insertar números directamente y formatear
+                const currentValue = e.target.value.replace(/\D/g, '');
+                const newValue = (currentValue + numbers).substring(0, 8);
                 e.target.value = '';
-                e.target.focus();
-                // Simular escritura para aplicar formato
-                numbers.split('').forEach((char, index) => {
-                    setTimeout(() => {
-                        e.target.value += char;
-                        formatDNI(e.target);
-                    }, index * 10);
-                });
+                
+                // Aplicar formato
+                let formatted = '';
+                if (newValue.length > 0) {
+                    if (newValue.length <= 2) {
+                        formatted = newValue;
+                    } else if (newValue.length <= 5) {
+                        formatted = newValue.substring(0, 2) + '.' + newValue.substring(2);
+                    } else {
+                        formatted = newValue.substring(0, 2) + '.' + newValue.substring(2, 5) + '.' + newValue.substring(5);
+                    }
+                }
+                e.target.value = formatted;
+                
+                // Posicionar cursor al final
+                e.target.setSelectionRange(formatted.length, formatted.length);
             });
         }
 
         // Formateo automático de Fecha
         const fechaInput = document.getElementById('regFecha');
         if (fechaInput) {
+            // Prevenir letras al escribir
+            fechaInput.addEventListener('keydown', preventNonNumericFecha);
+            
+            // Formatear mientras escribe
             fechaInput.addEventListener('input', (e) => {
                 formatFecha(e.target);
             });
@@ -1207,28 +1301,42 @@ document.addEventListener('DOMContentLoaded', () => {
             fechaInput.addEventListener('blur', (e) => {
                 const fecha = e.target.value.trim();
                 if (fecha && !validateFecha(fecha)) {
+                    e.target.classList.add('error');
                     e.target.style.borderColor = 'var(--error)';
                     e.target.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
                 } else {
+                    e.target.classList.remove('error');
                     e.target.style.borderColor = '';
                     e.target.style.boxShadow = '';
                 }
             });
             
-            // Prevenir pegar texto no numérico
+            // Manejar pegado de texto
             fechaInput.addEventListener('paste', (e) => {
                 e.preventDefault();
                 const paste = (e.clipboardData || window.clipboardData).getData('text');
                 const numbers = paste.replace(/\D/g, '').substring(0, 8);
+                
+                // Insertar números directamente y formatear
+                const currentValue = e.target.value.replace(/\D/g, '');
+                const newValue = (currentValue + numbers).substring(0, 8);
                 e.target.value = '';
-                e.target.focus();
-                // Simular escritura para aplicar formato
-                numbers.split('').forEach((char, index) => {
-                    setTimeout(() => {
-                        e.target.value += char;
-                        formatFecha(e.target);
-                    }, index * 10);
-                });
+                
+                // Aplicar formato
+                let formatted = '';
+                if (newValue.length > 0) {
+                    if (newValue.length <= 2) {
+                        formatted = newValue;
+                    } else if (newValue.length <= 4) {
+                        formatted = newValue.substring(0, 2) + '/' + newValue.substring(2);
+                    } else {
+                        formatted = newValue.substring(0, 2) + '/' + newValue.substring(2, 4) + '/' + newValue.substring(4);
+                    }
+                }
+                e.target.value = formatted;
+                
+                // Posicionar cursor al final
+                e.target.setSelectionRange(formatted.length, formatted.length);
             });
         }
 
