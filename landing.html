@@ -28,146 +28,186 @@
                     <i class="fas fa-sign-in-alt"></i>
                     Iniciar Sesión
                 </button>
+                <button class="btn-primary" onclick="openRegisterModal()">
+                    <i class="fas fa-user-plus"></i>
+                    Registrarse
+                </button>
             </div>
         </nav>
     </header>
 
-    <!-- Hero Section -->
-    <section class="hero-section">
-        <div class="hero-content">
-            <h1 class="hero-title">Gestión Profesional de Turnos Médicos</h1>
-            <p class="hero-subtitle">
-                Simplifica la administración de tu consultorio con una plataforma moderna,
-                intuitiva y completamente funcional.
-            </p>
-            <div class="hero-actions">
-                <button class="btn-primary btn-lg" onclick="openRegisterModal()">
-                    <i class="fas fa-user-plus"></i>
-                    Crear Cuenta Gratis
-                </button>
-                <button class="btn-secondary btn-lg" onclick="openLoginModal()">
-                    <i class="fas fa-sign-in-alt"></i>
-                    Iniciar Sesión
-                </button>
+    <!-- Sección Hero -->
+    <main class="landing-page">
+        <section class="hero-section">
+            <div class="hero-content">
+                <h1 class="hero-title">Gestión Profesional de Turnos Médicos</h1>
+                <p class="hero-subtitle">
+                    Simplifica la administración de tu consultorio médico con nuestra plataforma integral.
+                    Gestiona turnos, pacientes y médicos de manera eficiente y profesional.
+                </p>
+                <div class="hero-actions">
+                    <button class="btn-primary" onclick="openRegisterModal()">
+                        <i class="fas fa-rocket"></i>
+                        Comenzar Gratis
+                    </button>
+                    <button class="btn-secondary" onclick="scrollToFeatures()">
+                        <i class="fas fa-info-circle"></i>
+                        Más Información
+                    </button>
+                </div>
+                <div class="hero-image">
+                    <div class="hero-dashboard-preview">
+                        <div class="preview-header">
+                            <div class="preview-logo">
+                                <i class="fas fa-stethoscope"></i>
+                                <span>MediTurnos</span>
+                            </div>
+                            <span>Dashboard</span>
+                        </div>
+                        <div class="preview-stats">
+                            <div class="preview-stat">
+                                <span class="preview-stat-number">24</span>
+                                <span class="preview-stat-label">Turnos Hoy</span>
+                            </div>
+                            <div class="preview-stat">
+                                <span class="preview-stat-number">156</span>
+                                <span class="preview-stat-label">Pacientes</span>
+                            </div>
+                            <div class="preview-stat">
+                                <span class="preview-stat-number">12</span>
+                                <span class="preview-stat-label">Médicos</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Features Section -->
-    <section id="features" class="features-section">
-        <div class="features-container">
-            <h2 class="section-title">Características Principales</h2>
-            <p class="section-subtitle">
-                Todo lo que necesitas para gestionar tu consultorio de manera eficiente
-            </p>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-calendar-check"></i>
+        <!-- Sección de Características -->
+        <section class="features-section" id="features">
+            <div class="features-container">
+                <h2 class="section-title">¿Por qué elegir MediTurnos?</h2>
+                <p class="section-subtitle">
+                    Nuestra plataforma está diseñada específicamente para profesionales de la salud,
+                    ofreciendo herramientas poderosas y fáciles de usar.
+                </p>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <h3 class="feature-title">Gestión de Turnos</h3>
+                        <p class="feature-description">
+                            Programa, modifica y cancela turnos de manera intuitiva.
+                            Sistema de notificaciones automáticas para pacientes y médicos.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Gestión de Turnos</h3>
-                    <p class="feature-description">
-                        Administra turnos de manera eficiente con calendario integrado,
-                        recordatorios automáticos y seguimiento en tiempo real.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-users"></i>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <h3 class="feature-title">Base de Pacientes</h3>
+                        <p class="feature-description">
+                            Mantén un registro completo de tus pacientes con historial médico,
+                            contactos de emergencia y notas personalizadas.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Gestión de Pacientes</h3>
-                    <p class="feature-description">
-                        Mantén un registro completo de tus pacientes con historial clínico,
-                        datos de contacto y seguimiento de visitas.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-user-md"></i>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-user-md"></i>
+                        </div>
+                        <h3 class="feature-title">Gestión de Médicos</h3>
+                        <p class="feature-description">
+                            Administra el equipo médico, especialidades, horarios de trabajo
+                            y disponibilidad en tiempo real.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Panel de Médicos</h3>
-                    <p class="feature-description">
-                        Gestiona múltiples médicos, especialidades y horarios de atención
-                        de forma centralizada.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-shield-alt"></i>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <h3 class="feature-title">Reportes y Estadísticas</h3>
+                        <p class="feature-description">
+                            Genera reportes detallados sobre consultas, ingresos y
+                            rendimiento del consultorio.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Sistema de Roles</h3>
-                    <p class="feature-description">
-                        Control de acceso por roles: Administrador, Secretario, Médico y Paciente
-                        con permisos diferenciados.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-chart-line"></i>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-mobile-alt"></i>
+                        </div>
+                        <h3 class="feature-title">Acceso Móvil</h3>
+                        <p class="feature-description">
+                            Accede a tu sistema desde cualquier dispositivo.
+                            Interfaz responsive optimizada para tablets y móviles.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Reportes y Estadísticas</h3>
-                    <p class="feature-description">
-                        Visualiza métricas importantes, reportes de turnos y estadísticas
-                        de tu consultorio en tiempo real.
-                    </p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-mobile-alt"></i>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3 class="feature-title">Seguridad y Privacidad</h3>
+                        <p class="feature-description">
+                            Protección de datos médicos con encriptación avanzada
+                            y cumplimiento de normativas de privacidad.
+                        </p>
                     </div>
-                    <h3 class="feature-title">Totalmente Responsive</h3>
-                    <p class="feature-description">
-                        Accede desde cualquier dispositivo. Interfaz optimizada para
-                        escritorio, tablet y móvil.
-                    </p>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- CTA Section -->
-    <section class="cta-section">
-        <div class="cta-container">
-            <h2 class="cta-title">¿Listo para comenzar?</h2>
-            <p class="cta-description">
-                Únete a MediTurnos y transforma la gestión de tu consultorio hoy mismo
-            </p>
-            <div class="cta-actions">
-                <button class="btn-white btn-lg" onclick="openRegisterModal()">
-                    <i class="fas fa-rocket"></i>
-                    Comenzar Gratis
-                </button>
-                <button class="btn-outline-white btn-lg" onclick="openLoginModal()">
-                    <i class="fas fa-sign-in-alt"></i>
-                    Ya tengo cuenta
-                </button>
+        <!-- Sección de Call to Action -->
+        <section class="cta-section">
+            <div class="cta-container">
+                <h2 class="cta-title">¿Listo para modernizar tu consultorio?</h2>
+                <p class="cta-description">
+                    Únete a cientos de profesionales de la salud que ya confían en MediTurnos
+                    para gestionar sus consultorios de manera eficiente.
+                </p>
+                <div class="cta-actions">
+                    <button class="btn-white" onclick="openRegisterModal()">
+                        <i class="fas fa-user-plus"></i>
+                        Crear Cuenta Gratis
+                    </button>
+                    <button class="btn-outline-white" onclick="openLoginModal()">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Acceder al Sistema
+                    </button>
+                </div>
+
             </div>
-        </div>
-    </section>
+        </section>
+    </main>
 
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">
             <div class="footer-section">
                 <h3>MediTurnos</h3>
-                <p>Sistema profesional de gestión de turnos médicos</p>
+                <p>
+                    La solución integral para la gestión de turnos médicos.
+                    Diseñada por profesionales, para profesionales.
+                </p>
             </div>
             <div class="footer-section">
-                <h3>Enlaces</h3>
+                <h3>Producto</h3>
                 <p><a href="#features">Características</a></p>
-                <p><a href="#about">Acerca de</a></p>
-                <p><a href="#contact">Contacto</a></p>
+                <p><a href="#pricing">Precios</a></p>
+                <p><a href="#demo">Demo</a></p>
+                <p><a href="#api">API</a></p>
             </div>
             <div class="footer-section">
                 <h3>Soporte</h3>
                 <p><a href="#help">Centro de Ayuda</a></p>
                 <p><a href="#contact">Contacto</a></p>
                 <p><a href="#docs">Documentación</a></p>
+                <p><a href="#status">Estado del Sistema</a></p>
             </div>
             <div class="footer-section">
                 <h3>Legal</h3>
                 <p><a href="#privacy">Política de Privacidad</a></p>
                 <p><a href="#terms">Términos de Servicio</a></p>
+                <p><a href="#cookies">Política de Cookies</a></p>
             </div>
         </div>
         <div class="footer-bottom">
@@ -183,7 +223,7 @@
                 <h2>Iniciar Sesión</h2>
                 <p>Accede a tu cuenta de MediTurnos</p>
             </div>
-            <form class="login-form" onsubmit="event.preventDefault();">
+            <form class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label for="email">Correo Electrónico</label>
                     <input type="email" id="email" name="email" class="form-control" required>
@@ -229,11 +269,11 @@
                 <div class="form-group">
                     <label for="regDNI">DNI</label>
                     <input type="text" id="regDNI" name="dni" class="form-control" inputmode="numeric" pattern="^\d{2}\.\d{3}\.\d{3}$"
-                        maxlength="10" placeholder="12.345.678" required>
+                        maxlength="11" placeholder="12.345.678" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="regFecha">Fecha de Nacimiento (dd/mm/yyyy)</label>
+                    <label for="regFecha">Fecha de Nacimiento</label>
                     <input type="text" id="regFecha" name="fecha_de_nacimiento" class="form-control" inputmode="numeric"
                         pattern="^\d{2}\/\d{2}\/\d{4}$" maxlength="10" placeholder="dd/mm/yyyy" required>
                 </div>
@@ -277,4 +317,3 @@
 </body>
 
 </html>
-
