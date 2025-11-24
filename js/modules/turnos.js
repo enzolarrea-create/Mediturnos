@@ -3,156 +3,128 @@
 // ============================================
 
 import { CONFIG } from '../config.js';
-import { StorageManager } from './storage.js';
+import { ApiClient } from './api.js';
 import { AuthManager } from './auth.js';
 
 export class TurnosManager {
-    static getAll(filters = {}) {
-        let turnos = StorageManager.get(CONFIG.STORAGE.TURNOS) || [];
-        
-        // Filtros
-        if (filters.fecha) {
-            turnos = turnos.filter(t => t.fecha === filters.fecha);
-        }
-        if (filters.medicoId) {
-            turnos = turnos.filter(t => t.medicoId === parseInt(filters.medicoId));
-        }
-        if (filters.pacienteId) {
-            turnos = turnos.filter(t => t.pacienteId === parseInt(filters.pacienteId));
-        }
-        if (filters.estado) {
-            turnos = turnos.filter(t => t.estado === filters.estado);
-        }
-        if (filters.desde) {
-            turnos = turnos.filter(t => t.fecha >= filters.desde);
-        }
-        if (filters.hasta) {
-            turnos = turnos.filter(t => t.fecha <= filters.hasta);
-        }
+    static async getAll(filters = {}) {
+        try {
+            // Preparar filtros para la API
+            const apiFilters = {};
+            
+            if (filters.fecha) apiFilters.fecha = filters.fecha;
+            if (filters.medicoId) apiFilters.medicoId = filters.medicoId;
+            if (filters.pacienteId) apiFilters.pacienteId = filters.pacienteId;
+            if (filters.estado) apiFilters.estado = filters.estado;
+            if (filters.desde) apiFilters.desde = filters.desde;
+            if (filters.hasta) apiFilters.hasta = filters.hasta;
 
-        // Si es médico, solo sus turnos
-        const user = AuthManager.getCurrentUser();
-        if (user && user.rol === CONFIG.ROLES.MEDICO && user.medicoId) {
-            turnos = turnos.filter(t => t.medicoId === user.medicoId);
+            const turnos = await ApiClient.getTurnos(apiFilters);
+            
+            // Normalizar datos (asegurar que estado sea consistente)
+            return turnos.map(t => ({
+                ...t,
+                estado: t.estado || t.estadoCodigo || CONFIG.TURNO_ESTADOS.PENDIENTE
+            }));
+        } catch (error) {
+            console.error('Error al obtener turnos:', error);
+            return [];
         }
-
-        // Si es paciente, solo sus turnos
-        if (user && user.rol === CONFIG.ROLES.PACIENTE && user.pacienteId) {
-            turnos = turnos.filter(t => t.pacienteId === user.pacienteId);
-        }
-
-        return turnos.sort((a, b) => {
-            const dateA = new Date(a.fecha + ' ' + a.hora);
-            const dateB = new Date(b.fecha + ' ' + b.hora);
-            return dateA - dateB;
-        });
     }
 
-    static getById(id) {
-        const turnos = this.getAll();
-        return turnos.find(t => t.id === parseInt(id));
-    }
-
-    static create(turnoData) {
-        const turnos = StorageManager.get(CONFIG.STORAGE.TURNOS) || [];
-        
-        // Validar disponibilidad
-        const conflicto = turnos.find(t => 
-            t.medicoId === turnoData.medicoId &&
-            t.fecha === turnoData.fecha &&
-            t.hora === turnoData.hora &&
-            t.estado !== CONFIG.TURNO_ESTADOS.CANCELADO
-        );
-
-        if (conflicto) {
-            return { success: false, message: 'El médico ya tiene un turno en esa fecha y hora' };
+    static async getById(id) {
+        try {
+            return await ApiClient.getTurno(id);
+        } catch (error) {
+            console.error('Error al obtener turno:', error);
+            return null;
         }
-
-        const newTurno = {
-            id: Date.now(),
-            pacienteId: parseInt(turnoData.pacienteId),
-            medicoId: parseInt(turnoData.medicoId),
-            fecha: turnoData.fecha,
-            hora: turnoData.hora,
-            estado: turnoData.estado || CONFIG.TURNO_ESTADOS.PENDIENTE,
-            motivo: turnoData.motivo || '',
-            notas: turnoData.notas || '',
-            fechaCreacion: new Date().toISOString(),
-            creadoPor: AuthManager.getCurrentUser()?.id || null
-        };
-
-        turnos.push(newTurno);
-        StorageManager.set(CONFIG.STORAGE.TURNOS, turnos);
-
-        return { success: true, turno: newTurno };
     }
 
-    static update(id, updates) {
-        const turnos = StorageManager.get(CONFIG.STORAGE.TURNOS) || [];
-        const index = turnos.findIndex(t => t.id === parseInt(id));
+    static async create(turnoData) {
+        try {
+            // Preparar datos para la API
+            const data = {
+                pacienteId: parseInt(turnoData.pacienteId),
+                medicoId: parseInt(turnoData.medicoId),
+                fecha: turnoData.fecha,
+                hora: turnoData.hora,
+                motivo: turnoData.motivo || '',
+                notas: turnoData.notas || '',
+                estado: turnoData.estado || CONFIG.TURNO_ESTADOS.PENDIENTE
+            };
 
-        if (index === -1) {
-            return { success: false, message: 'Turno no encontrado' };
+            const turno = await ApiClient.createTurno(data);
+            return { success: true, turno };
+        } catch (error) {
+            console.error('Error al crear turno:', error);
+            return { success: false, message: error.message || 'Error al crear turno' };
         }
+    }
 
-        // Validar disponibilidad si cambia fecha/hora/médico
-        if (updates.fecha || updates.hora || updates.medicoId) {
-            const fecha = updates.fecha || turnos[index].fecha;
-            const hora = updates.hora || turnos[index].hora;
-            const medicoId = updates.medicoId || turnos[index].medicoId;
+    static async update(id, updates) {
+        try {
+            // Preparar datos para la API
+            const data = {};
+            
+            if (updates.pacienteId) data.pacienteId = parseInt(updates.pacienteId);
+            if (updates.medicoId) data.medicoId = parseInt(updates.medicoId);
+            if (updates.fecha) data.fecha = updates.fecha;
+            if (updates.hora) data.hora = updates.hora;
+            if (updates.estado) data.estado = updates.estado;
+            if (updates.motivo !== undefined) data.motivo = updates.motivo;
+            if (updates.notas !== undefined) data.notas = updates.notas;
 
-            const conflicto = turnos.find(t => 
-                t.id !== parseInt(id) &&
-                t.medicoId === parseInt(medicoId) &&
-                t.fecha === fecha &&
-                t.hora === hora &&
-                t.estado !== CONFIG.TURNO_ESTADOS.CANCELADO
-            );
-
-            if (conflicto) {
-                return { success: false, message: 'El médico ya tiene un turno en esa fecha y hora' };
-            }
+            const turno = await ApiClient.updateTurno(id, data);
+            return { success: true, turno };
+        } catch (error) {
+            console.error('Error al actualizar turno:', error);
+            return { success: false, message: error.message || 'Error al actualizar turno' };
         }
-
-        turnos[index] = {
-            ...turnos[index],
-            ...updates,
-            fechaActualizacion: new Date().toISOString(),
-            actualizadoPor: AuthManager.getCurrentUser()?.id || null
-        };
-
-        StorageManager.set(CONFIG.STORAGE.TURNOS, turnos);
-        return { success: true, turno: turnos[index] };
     }
 
-    static cancel(id) {
-        return this.update(id, { estado: CONFIG.TURNO_ESTADOS.CANCELADO });
+    static async cancel(id) {
+        try {
+            await ApiClient.cancelTurno(id);
+            return { success: true };
+        } catch (error) {
+            console.error('Error al cancelar turno:', error);
+            return { success: false, message: error.message || 'Error al cancelar turno' };
+        }
     }
 
-    static getTurnosDelDia(fecha = null) {
-        const fechaStr = fecha || new Date().toISOString().split('T')[0];
-        return this.getAll({ fecha: fechaStr });
+    static async getTurnosDelDia(fecha = null) {
+        try {
+            return await ApiClient.getTurnosDelDia(fecha);
+        } catch (error) {
+            console.error('Error al obtener turnos del día:', error);
+            return [];
+        }
     }
 
-    static getProximosTurnos(limit = 5) {
-        const hoy = new Date().toISOString().split('T')[0];
-        const turnos = this.getAll({ desde: hoy });
-        return turnos
-            .filter(t => t.estado !== CONFIG.TURNO_ESTADOS.CANCELADO)
-            .slice(0, limit);
+    static async getProximosTurnos(limit = 5) {
+        try {
+            return await ApiClient.getProximosTurnos(limit);
+        } catch (error) {
+            console.error('Error al obtener próximos turnos:', error);
+            return [];
+        }
     }
 
-    static getEstadisticas(fechaInicio, fechaFin) {
-        const turnos = this.getAll({ desde: fechaInicio, hasta: fechaFin });
-        
-        return {
-            total: turnos.length,
-            pendientes: turnos.filter(t => t.estado === CONFIG.TURNO_ESTADOS.PENDIENTE).length,
-            confirmados: turnos.filter(t => t.estado === CONFIG.TURNO_ESTADOS.CONFIRMADO).length,
-            completados: turnos.filter(t => t.estado === CONFIG.TURNO_ESTADOS.COMPLETADO).length,
-            cancelados: turnos.filter(t => t.estado === CONFIG.TURNO_ESTADOS.CANCELADO).length,
-            noAsistio: turnos.filter(t => t.estado === CONFIG.TURNO_ESTADOS.NO_ASISTIO).length
-        };
+    static async getEstadisticas(fechaInicio, fechaFin) {
+        try {
+            return await ApiClient.getEstadisticas(fechaInicio, fechaFin);
+        } catch (error) {
+            console.error('Error al obtener estadísticas:', error);
+            return {
+                total: 0,
+                pendientes: 0,
+                confirmados: 0,
+                completados: 0,
+                cancelados: 0,
+                noAsistio: 0
+            };
+        }
     }
 }
 

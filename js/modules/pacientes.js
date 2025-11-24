@@ -3,37 +3,32 @@
 // ============================================
 
 import { CONFIG } from '../config.js';
-import { StorageManager } from './storage.js';
-import { TurnosManager } from './turnos.js';
+import { ApiClient } from './api.js';
 
 export class PacientesManager {
-    static getAll(filters = {}) {
-        let pacientes = StorageManager.get(CONFIG.STORAGE.PACIENTES) || [];
+    static async getAll(filters = {}) {
+        try {
+            // Preparar filtros para la API
+            const apiFilters = {};
+            
+            if (filters.activo !== undefined) apiFilters.activo = filters.activo;
+            if (filters.search) apiFilters.search = filters.search;
 
-        if (filters.activo !== undefined) {
-            pacientes = pacientes.filter(p => p.activo === filters.activo);
+            const pacientes = await ApiClient.getPacientes(apiFilters);
+            return pacientes || [];
+        } catch (error) {
+            console.error('Error al obtener pacientes:', error);
+            return [];
         }
-
-        if (filters.search) {
-            const search = filters.search.toLowerCase();
-            pacientes = pacientes.filter(p => 
-                p.nombre.toLowerCase().includes(search) ||
-                p.apellido.toLowerCase().includes(search) ||
-                p.dni.includes(search) ||
-                p.email?.toLowerCase().includes(search)
-            );
-        }
-
-        return pacientes.sort((a, b) => {
-            const nameA = `${a.nombre} ${a.apellido}`.toLowerCase();
-            const nameB = `${b.nombre} ${b.apellido}`.toLowerCase();
-            return nameA.localeCompare(nameB);
-        });
     }
 
-    static getById(id) {
-        const pacientes = this.getAll();
-        return pacientes.find(p => p.id === parseInt(id));
+    static async getById(id) {
+        try {
+            return await ApiClient.getPaciente(id);
+        } catch (error) {
+            console.error('Error al obtener paciente:', error);
+            return null;
+        }
     }
 
     static create(pacienteData) {
@@ -105,13 +100,14 @@ export class PacientesManager {
         return { success: true };
     }
 
-    static getHistorial(id) {
-        const turnos = TurnosManager.getAll({ pacienteId: id });
-        return turnos.sort((a, b) => {
-            const dateA = new Date(a.fecha + ' ' + a.hora);
-            const dateB = new Date(b.fecha + ' ' + b.hora);
-            return dateB - dateA;
-        });
+    static async getHistorial(id) {
+        try {
+            const historial = await ApiClient.getPacienteHistorial(id);
+            return Array.isArray(historial) ? historial : [];
+        } catch (error) {
+            console.error('Error al obtener historial:', error);
+            return [];
+        }
     }
 
     static updateUltimaVisita(id) {

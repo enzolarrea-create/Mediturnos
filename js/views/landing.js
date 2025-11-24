@@ -6,6 +6,7 @@ import { AuthManager } from '../modules/auth.js';
 import { NotificationManager } from '../modules/notifications.js';
 import { Router } from '../modules/router.js';
 import { StorageManager } from '../modules/storage.js';
+import { ApiClient } from '../modules/api.js';
 import { FormValidator } from '../components/form.js';
 
 class LandingView {
@@ -316,20 +317,37 @@ class LandingView {
             return;
         }
 
-        // Asegurar inicialización antes del login
-        StorageManager.init();
+        // Deshabilitar botón durante la petición
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalText = submitButton?.textContent;
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Iniciando sesión...';
+        }
 
-        const result = AuthManager.login(email, password);
-
-        if (result.success) {
-            NotificationManager.success('Inicio de sesión exitoso');
-            setTimeout(() => {
-                Router.redirectByRole(result.user.rol);
-            }, 500);
-        } else {
-            NotificationManager.error(result.message || 'Error al iniciar sesión');
-            // Mostrar ayuda adicional
-            console.error('Error de login. Usuarios disponibles:', StorageManager.get('mediturnos_users'));
+        try {
+            // Usar API directamente
+            const response = await ApiClient.login(email, password);
+            
+            if (response.success && response.user) {
+                // Guardar usuario en localStorage para compatibilidad
+                StorageManager.set('mediturnos_current_user', response.user);
+                
+                NotificationManager.success('Inicio de sesión exitoso');
+                setTimeout(() => {
+                    Router.redirectByRole(response.user.rol);
+                }, 500);
+            } else {
+                NotificationManager.error(response.message || 'Error al iniciar sesión');
+            }
+        } catch (error) {
+            console.error('Error en login:', error);
+            NotificationManager.error(error.message || 'Error al iniciar sesión');
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
         }
     }
 
@@ -357,15 +375,64 @@ class LandingView {
             return;
         }
 
-        const result = AuthManager.register(userData);
+        // Deshabilitar botón durante la petición
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalText = submitButton?.textContent;
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Registrando...';
+        }
 
-        if (result.success) {
-            NotificationManager.success('Registro exitoso. Redirigiendo...');
-            setTimeout(() => {
-                Router.redirectByRole(result.user.rol);
-            }, 1000);
-        } else {
-            NotificationManager.error(result.message || 'Error al registrar');
+        try {
+            // Convertir fecha de formato DD/MM/YYYY a YYYY-MM-DD
+            if (userData.fechaNacimiento) {
+                const fechaParts = userData.fechaNacimiento.split('/');
+                if (fechaParts.length === 3) {
+                    userData.fechaNacimiento = `${fechaParts[2]}-${fechaParts[1]}-${fechaParts[0]}`;
+                }
+            }
+
+            // Convertir DNI de formato con puntos a solo números
+            if (userData.dni) {
+                userData.dni = userData.dni.replace(/\./g, '');
+            }
+
+            // Preparar datos para la API
+            const registerData = {
+                nombre: userData.nombre,
+                apellido: userData.apellido,
+                email: userData.email,
+                password: userData.password,
+                confirmPassword: userData.confirmPassword,
+                rol: userData.rol || 'paciente',
+                dni: userData.dni,
+                telefono: userData.telefono || '',
+                fechaNacimiento: userData.fechaNacimiento,
+                direccion: userData.direccion || ''
+            };
+
+            // Usar API directamente
+            const response = await ApiClient.register(registerData);
+            
+            if (response.success && response.user) {
+                // Guardar usuario en localStorage para compatibilidad
+                StorageManager.set('mediturnos_current_user', response.user);
+                
+                NotificationManager.success('Registro exitoso. Redirigiendo...');
+                setTimeout(() => {
+                    Router.redirectByRole(response.user.rol);
+                }, 1000);
+            } else {
+                NotificationManager.error(response.message || 'Error al registrar');
+            }
+        } catch (error) {
+            console.error('Error en registro:', error);
+            NotificationManager.error(error.message || 'Error al registrar');
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
         }
     }
 

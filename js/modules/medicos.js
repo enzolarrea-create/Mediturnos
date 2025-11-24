@@ -3,36 +3,50 @@
 // ============================================
 
 import { CONFIG } from '../config.js';
-import { StorageManager } from './storage.js';
-import { TurnosManager } from './turnos.js';
+import { ApiClient } from './api.js';
 
 export class MedicosManager {
-    static getAll(filters = {}) {
-        let medicos = StorageManager.get(CONFIG.STORAGE.MEDICOS) || [];
+    static async getAll(filters = {}) {
+        try {
+            // Preparar filtros para la API
+            const apiFilters = {};
+            
+            if (filters.activo !== undefined) apiFilters.activo = filters.activo;
+            if (filters.especialidad) apiFilters.especialidad = filters.especialidad;
+            if (filters.search) apiFilters.search = filters.search;
 
-        if (filters.activo !== undefined) {
-            medicos = medicos.filter(m => m.activo === filters.activo);
+            const medicos = await ApiClient.getMedicos(apiFilters);
+            
+            // Normalizar datos (convertir especialidades de string a array si es necesario)
+            return medicos.map(m => ({
+                ...m,
+                especialidad: m.especialidades || m.especialidad || '',
+                especialidades: m.especialidades ? m.especialidades.split(', ') : [m.especialidad || '']
+            }));
+        } catch (error) {
+            console.error('Error al obtener médicos:', error);
+            return [];
         }
-
-        if (filters.especialidad) {
-            medicos = medicos.filter(m => m.especialidad === filters.especialidad);
-        }
-
-        if (filters.search) {
-            const search = filters.search.toLowerCase();
-            medicos = medicos.filter(m => 
-                m.nombre.toLowerCase().includes(search) ||
-                m.especialidad.toLowerCase().includes(search) ||
-                m.matricula.includes(search)
-            );
-        }
-
-        return medicos.sort((a, b) => a.nombre.localeCompare(b.nombre));
     }
 
-    static getById(id) {
-        const medicos = this.getAll();
-        return medicos.find(m => m.id === parseInt(id));
+    static async getById(id) {
+        try {
+            const medico = await ApiClient.getMedico(id);
+            
+            // Normalizar datos
+            if (medico) {
+                return {
+                    ...medico,
+                    especialidad: medico.especialidades || medico.especialidad || '',
+                    especialidades: medico.especialidades ? medico.especialidades.split(', ') : [medico.especialidad || '']
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error al obtener médico:', error);
+            return null;
+        }
     }
 
     static create(medicoData) {
@@ -103,32 +117,29 @@ export class MedicosManager {
         return { success: true };
     }
 
-    static getDisponibilidad(id, fecha) {
-        const turnos = TurnosManager.getAll({ medicoId: id, fecha });
-        const medico = this.getById(id);
-        
-        if (!medico) return { disponible: false };
-
-        const turnosActivos = turnos.filter(t => 
-            t.estado !== CONFIG.TURNO_ESTADOS.CANCELADO &&
-            t.estado !== CONFIG.TURNO_ESTADOS.COMPLETADO
-        );
-
-        return {
-            disponible: turnosActivos.length < 20, // Máximo 20 turnos por día
-            turnosOcupados: turnosActivos.length,
-            turnos: turnosActivos
-        };
+    static async getDisponibilidad(id, fecha) {
+        try {
+            const disponibilidad = await ApiClient.getMedicoDisponibilidad(id, fecha);
+            return disponibilidad;
+        } catch (error) {
+            console.error('Error al obtener disponibilidad:', error);
+            return { disponible: false, turnosOcupados: 0, turnos: [] };
+        }
     }
 
-    static getHorariosDisponibles(id, fecha) {
-        const disponibilidad = this.getDisponibilidad(id, fecha);
-        const medico = this.getById(id);
-        
-        if (!medico) return [];
-
-        const horariosOcupados = disponibilidad.turnos.map(t => t.hora);
-        return CONFIG.HORARIOS.filter(hora => !horariosOcupados.includes(hora));
+    static async getHorariosDisponibles(id, fecha) {
+        try {
+            const horarios = await ApiClient.getMedicoHorariosDisponibles(id, fecha);
+            // Si la API devuelve un array, usarlo; si no, usar horarios del sistema
+            if (Array.isArray(horarios) && horarios.length > 0) {
+                return horarios;
+            }
+            // Fallback: usar horarios del sistema
+            return CONFIG.HORARIOS;
+        } catch (error) {
+            console.error('Error al obtener horarios disponibles:', error);
+            return CONFIG.HORARIOS;
+        }
     }
 
     static getEspecialidades() {

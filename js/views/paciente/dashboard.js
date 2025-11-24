@@ -12,18 +12,25 @@ class PacienteDashboard {
             return;
         }
         this.user = AuthManager.getCurrentUser();
-        this.paciente = this.user.pacienteId ? PacientesManager.getById(this.user.pacienteId) : null;
-        this.init();
+        this.paciente = null;
+        // No llamar init() aquí, se llamará después
     }
 
-    init() {
+    async loadPacienteData() {
+        if (this.user && this.user.pacienteId) {
+            this.paciente = await PacientesManager.getById(this.user.pacienteId);
+        }
+    }
+
+    async init() {
+        await this.loadPacienteData();
         this.setupNavigation();
-        this.loadDashboard();
+        await this.loadDashboard();
     }
 
     setupNavigation() {
         document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', async () => {
                 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
                 document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
                 item.classList.add('active');
@@ -31,150 +38,225 @@ class PacienteDashboard {
                 if (section) {
                     section.classList.add('active');
                     const sectionId = item.getAttribute('data-section');
-                    if (sectionId === 'dashboard') this.loadDashboard();
-                    else if (sectionId === 'turnos') this.loadTurnos();
-                    else if (sectionId === 'reservar') this.loadReservar();
-                    else if (sectionId === 'historial') this.loadHistorial();
+                    if (sectionId === 'dashboard') await this.loadDashboard();
+                    else if (sectionId === 'turnos') await this.loadTurnos();
+                    else if (sectionId === 'reservar') await this.loadReservar();
+                    else if (sectionId === 'historial') await this.loadHistorial();
                     else if (sectionId === 'perfil') this.loadPerfil();
                 }
             });
         });
     }
 
-    loadDashboard() {
-        if (!this.paciente) return;
+    async loadDashboard() {
+        if (!this.paciente) {
+            await this.loadPacienteData();
+            if (!this.paciente) return;
+        }
 
-        const proximos = TurnosManager.getProximosTurnos(5).filter(t => t.pacienteId === this.paciente.id);
         const div = document.getElementById('proximos-turnos');
         if (!div) return;
 
-        if (proximos.length === 0) {
-            div.innerHTML = '<p class="text-center">No tienes turnos próximos</p>';
-        } else {
-            div.innerHTML = proximos.map(t => {
-                const medico = MedicosManager.getById(t.medicoId);
-                return `<div style="padding: var(--spacing-md); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
-                    <div>
-                        <strong>${t.fecha} ${t.hora}</strong><br>
-                        ${medico ? medico.nombre + ' - ' + medico.especialidad : 'N/A'}
-                    </div>
-                    <div>
-                        <span class="badge badge-${t.estado === 'confirmado' ? 'success' : 'warning'}">${t.estado}</span>
-                        <button class="btn-icon" onclick="cancelarTurno(${t.id})"><i class="fas fa-times"></i></button>
-                    </div>
-                </div>`;
-            }).join('');
+        try {
+            const proximos = await TurnosManager.getProximosTurnos(5);
+            const turnosPaciente = proximos.filter(t => 
+                t.pacienteId === this.paciente.id || 
+                t.pacienteId === parseInt(this.paciente.id)
+            );
+
+            if (turnosPaciente.length === 0) {
+                div.innerHTML = '<p class="text-center">No tienes turnos próximos</p>';
+            } else {
+                // Obtener información de médicos
+                const medicosMap = {};
+                for (const t of turnosPaciente) {
+                    if (t.medicoId && !medicosMap[t.medicoId]) {
+                        medicosMap[t.medicoId] = await MedicosManager.getById(t.medicoId);
+                    }
+                }
+
+                div.innerHTML = turnosPaciente.map(t => {
+                    const medico = medicosMap[t.medicoId];
+                    const estado = t.estado || t.estadoCodigo || 'pendiente';
+                    const especialidad = medico?.especialidad || medico?.especialidades?.[0] || 'N/A';
+                    return `<div style="padding: var(--spacing-md); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+                        <div>
+                            <strong>${t.fecha} ${t.hora}</strong><br>
+                            ${medico ? medico.nombre + ' - ' + especialidad : 'N/A'}
+                        </div>
+                        <div>
+                            <span class="badge badge-${estado === 'confirmado' ? 'success' : 'warning'}">${estado}</span>
+                            <button class="btn-icon" onclick="cancelarTurno(${t.id})"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        } catch (error) {
+            console.error('Error al cargar dashboard:', error);
+            div.innerHTML = '<p class="text-center text-error">Error al cargar turnos</p>';
         }
     }
 
-    loadTurnos() {
-        if (!this.paciente) return;
-        const turnos = TurnosManager.getAll({ pacienteId: this.paciente.id });
+    async loadTurnos() {
+        if (!this.paciente) {
+            await this.loadPacienteData();
+            if (!this.paciente) return;
+        }
+        
         const div = document.getElementById('mis-turnos');
         if (!div) return;
-        
-        div.innerHTML = turnos.map(t => {
-            const medico = MedicosManager.getById(t.medicoId);
-            return `<div class="card" style="margin-bottom: var(--spacing-md);">
-                <div class="card-body">
-                    <div style="display: flex; justify-content: space-between;">
-                        <div>
-                            <strong>${t.fecha} ${t.hora}</strong><br>
-                            ${medico ? medico.nombre + ' - ' + medico.especialidad : 'N/A'}
-                        </div>
-                        <div>
-                            <span class="badge badge-${t.estado === 'confirmado' ? 'success' : 'warning'}">${t.estado}</span>
-                            ${t.estado !== 'cancelado' && t.estado !== 'completado' ? 
-                                `<button class="btn-icon" onclick="cancelarTurno(${t.id})"><i class="fas fa-times"></i></button>` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-    }
 
-    async loadReservar() {
-        const medicos = MedicosManager.getAll({ activo: true });
-        const content = document.getElementById('reservar-content');
-        if (!content) return;
-        
-        const hoy = new Date().toISOString().split('T')[0];
-        
-        content.innerHTML = `
-            <div class="card">
-                <div class="card-body">
-                    <form id="reservarForm">
-                        <div class="form-group">
-                            <label>Médico / Especialidad *</label>
-                            <select name="medicoId" class="form-control" required id="reservarMedicoSelect">
-                                <option value="">Seleccionar médico</option>
-                                ${medicos.map(m => `<option value="${m.id}">${m.nombre} - ${m.especialidad}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Fecha *</label>
-                                <input type="date" name="fecha" class="form-control" required 
-                                    id="reservarFechaInput" min="${hoy}">
-                            </div>
-                            <div class="form-group">
-                                <label>Hora *</label>
-                                <select name="hora" class="form-control" required id="reservarHoraSelect">
-                                    <option value="">Seleccionar hora</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Motivo de consulta</label>
-                            <textarea name="motivo" class="form-control" rows="3" placeholder="Describir el motivo de la consulta..."></textarea>
-                        </div>
-                        <button type="submit" class="btn-primary">
-                            <i class="fas fa-calendar-plus"></i> Reservar Turno
-                        </button>
-                    </form>
-                </div>
-            </div>
-        `;
-
-        // Actualizar horarios disponibles cuando cambia médico o fecha
-        const medicoSelect = document.getElementById('reservarMedicoSelect');
-        const fechaInput = document.getElementById('reservarFechaInput');
-        const horaSelect = document.getElementById('reservarHoraSelect');
-
-        const updateHorariosDisponibles = async () => {
-            const medicoId = medicoSelect.value;
-            const fecha = fechaInput.value;
-
-            if (!medicoId || !fecha) {
-                horaSelect.innerHTML = '<option value="">Seleccionar hora</option>';
+        try {
+            const turnos = await TurnosManager.getAll({ pacienteId: this.paciente.id });
+            
+            if (turnos.length === 0) {
+                div.innerHTML = '<p class="text-center">No tienes turnos registrados</p>';
                 return;
             }
 
-            const horariosDisponibles = MedicosManager.getHorariosDisponibles(parseInt(medicoId), fecha);
+            // Obtener información de médicos
+            const medicosMap = {};
+            for (const t of turnos) {
+                if (t.medicoId && !medicosMap[t.medicoId]) {
+                    medicosMap[t.medicoId] = await MedicosManager.getById(t.medicoId);
+                }
+            }
             
-            horaSelect.innerHTML = '<option value="">Seleccionar hora</option>' +
-                CONFIG.HORARIOS.map(h => {
-                    const disponible = horariosDisponibles.includes(h);
-                    return `<option value="${h}" ${!disponible ? 'disabled' : ''}>
-                        ${h} ${!disponible ? '(Ocupado)' : ''}
-                    </option>`;
-                }).join('');
-        };
+            div.innerHTML = turnos.map(t => {
+                const medico = medicosMap[t.medicoId];
+                const estado = t.estado || t.estadoCodigo || 'pendiente';
+                const especialidad = medico?.especialidad || medico?.especialidades?.[0] || 'N/A';
+                return `<div class="card" style="margin-bottom: var(--spacing-md);">
+                    <div class="card-body">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <strong>${t.fecha} ${t.hora}</strong><br>
+                                ${medico ? medico.nombre + ' - ' + especialidad : 'N/A'}
+                            </div>
+                            <div>
+                                <span class="badge badge-${estado === 'confirmado' ? 'success' : estado === 'cancelado' ? 'error' : 'warning'}">${estado}</span>
+                                ${estado !== 'cancelado' && estado !== 'completado' ? 
+                                    `<button class="btn-icon" onclick="cancelarTurno(${t.id})"><i class="fas fa-times"></i></button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (error) {
+            console.error('Error al cargar turnos:', error);
+            div.innerHTML = '<p class="text-center text-error">Error al cargar turnos</p>';
+        }
+    }
 
-        medicoSelect?.addEventListener('change', updateHorariosDisponibles);
-        fechaInput?.addEventListener('change', updateHorariosDisponibles);
+    async loadReservar() {
+        if (!this.paciente) {
+            await this.loadPacienteData();
+            if (!this.paciente) {
+                NotificationManager.error('No se encontró información del paciente');
+                return;
+            }
+        }
 
-        const form = document.getElementById('reservarForm');
-        if (form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await this.reservarTurno(e.target);
-            });
+        const content = document.getElementById('reservar-content');
+        if (!content) return;
+
+        try {
+            const medicos = await MedicosManager.getAll({ activo: true });
+            const hoy = new Date().toISOString().split('T')[0];
+            
+            content.innerHTML = `
+                <div class="card">
+                    <div class="card-body">
+                        <form id="reservarForm">
+                            <div class="form-group">
+                                <label>Médico / Especialidad *</label>
+                                <select name="medicoId" class="form-control" required id="reservarMedicoSelect">
+                                    <option value="">Seleccionar médico</option>
+                                    ${medicos.map(m => {
+                                        const especialidad = m.especialidad || (m.especialidades && m.especialidades[0]) || 'N/A';
+                                        return `<option value="${m.id}">${m.nombre} - ${especialidad}</option>`;
+                                    }).join('')}
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Fecha *</label>
+                                    <input type="date" name="fecha" class="form-control" required 
+                                        id="reservarFechaInput" min="${hoy}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Hora *</label>
+                                    <select name="hora" class="form-control" required id="reservarHoraSelect">
+                                        <option value="">Seleccionar hora</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Motivo de consulta</label>
+                                <textarea name="motivo" class="form-control" rows="3" placeholder="Describir el motivo de la consulta..."></textarea>
+                            </div>
+                            <button type="submit" class="btn-primary" id="reservarSubmitBtn">
+                                <i class="fas fa-calendar-plus"></i> Reservar Turno
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            // Actualizar horarios disponibles cuando cambia médico o fecha
+            const medicoSelect = document.getElementById('reservarMedicoSelect');
+            const fechaInput = document.getElementById('reservarFechaInput');
+            const horaSelect = document.getElementById('reservarHoraSelect');
+
+            const updateHorariosDisponibles = async () => {
+                const medicoId = medicoSelect.value;
+                const fecha = fechaInput.value;
+
+                if (!medicoId || !fecha) {
+                    horaSelect.innerHTML = '<option value="">Seleccionar hora</option>';
+                    return;
+                }
+
+                try {
+                    const horariosDisponibles = await MedicosManager.getHorariosDisponibles(parseInt(medicoId), fecha);
+                    
+                    horaSelect.innerHTML = '<option value="">Seleccionar hora</option>' +
+                        CONFIG.HORARIOS.map(h => {
+                            const disponible = horariosDisponibles.includes(h);
+                            return `<option value="${h}" ${!disponible ? 'disabled' : ''}>
+                                ${h} ${!disponible ? '(Ocupado)' : ''}
+                            </option>`;
+                        }).join('');
+                } catch (error) {
+                    console.error('Error al obtener horarios disponibles:', error);
+                    horaSelect.innerHTML = '<option value="">Error al cargar horarios</option>';
+                }
+            };
+
+            medicoSelect?.addEventListener('change', updateHorariosDisponibles);
+            fechaInput?.addEventListener('change', updateHorariosDisponibles);
+
+            const form = document.getElementById('reservarForm');
+            if (form) {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    await this.reservarTurno(e.target);
+                });
+            }
+        } catch (error) {
+            console.error('Error al cargar formulario de reserva:', error);
+            content.innerHTML = '<p class="text-error">Error al cargar el formulario de reserva</p>';
         }
     }
 
     async reservarTurno(form) {
-        if (!this.paciente) return;
+        if (!this.paciente) {
+            await this.loadPacienteData();
+            if (!this.paciente) {
+                NotificationManager.error('No se encontró información del paciente');
+                return;
+            }
+        }
 
         const formData = new FormData(form);
         const turnoData = {
@@ -192,35 +274,78 @@ class PacienteDashboard {
             return;
         }
 
-        const result = TurnosManager.create(turnoData);
-        if (result.success) {
-            NotificationManager.success('Turno reservado exitosamente');
-            form.reset();
-            this.loadDashboard();
-            this.loadTurnos();
-        } else {
-            NotificationManager.error(result.message || 'Error al reservar el turno');
+        // Deshabilitar botón durante la petición
+        const submitButton = document.getElementById('reservarSubmitBtn');
+        const originalText = submitButton?.textContent;
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Reservando...';
+        }
+
+        try {
+            const result = await TurnosManager.create(turnoData);
+            if (result.success) {
+                NotificationManager.success('Turno reservado exitosamente');
+                form.reset();
+                // Recargar secciones
+                await this.loadDashboard();
+                await this.loadTurnos();
+                // Cambiar a la sección de turnos para ver el nuevo turno
+                const turnosNav = document.querySelector('[data-section="turnos"]');
+                if (turnosNav) {
+                    turnosNav.click();
+                }
+            } else {
+                NotificationManager.error(result.message || 'Error al reservar el turno');
+            }
+        } catch (error) {
+            console.error('Error al reservar turno:', error);
+            NotificationManager.error(error.message || 'Error al reservar el turno');
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
         }
     }
 
-    loadHistorial() {
-        if (!this.paciente) return;
-        const historial = PacientesManager.getHistorial(this.paciente.id);
+    async loadHistorial() {
+        if (!this.paciente) {
+            await this.loadPacienteData();
+            if (!this.paciente) return;
+        }
+        
         const content = document.getElementById('historial-content');
         if (!content) return;
-        
-        if (historial.length === 0) {
-            content.innerHTML = '<p class="text-center">No hay historial disponible</p>';
-        } else {
-            content.innerHTML = historial.map(t => {
-                const medico = MedicosManager.getById(t.medicoId);
-                return `<div class="card" style="margin-bottom: var(--spacing-md);">
-                    <div class="card-body">
-                        <strong>${t.fecha} ${t.hora}</strong> - ${medico ? medico.nombre : 'N/A'}<br>
-                        <span class="badge badge-${t.estado === 'completado' ? 'success' : 'warning'}">${t.estado}</span>
-                    </div>
-                </div>`;
-            }).join('');
+
+        try {
+            const historial = await PacientesManager.getHistorial(this.paciente.id);
+            
+            if (historial.length === 0) {
+                content.innerHTML = '<p class="text-center">No hay historial disponible</p>';
+            } else {
+                // Obtener información de médicos
+                const medicosMap = {};
+                for (const t of historial) {
+                    if (t.medicoId && !medicosMap[t.medicoId]) {
+                        medicosMap[t.medicoId] = await MedicosManager.getById(t.medicoId);
+                    }
+                }
+
+                content.innerHTML = historial.map(t => {
+                    const medico = medicosMap[t.medicoId];
+                    const estado = t.estado || t.estadoCodigo || 'pendiente';
+                    return `<div class="card" style="margin-bottom: var(--spacing-md);">
+                        <div class="card-body">
+                            <strong>${t.fecha} ${t.hora}</strong> - ${medico ? medico.nombre : 'N/A'}<br>
+                            <span class="badge badge-${estado === 'completado' ? 'success' : estado === 'cancelado' ? 'error' : 'warning'}">${estado}</span>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        } catch (error) {
+            console.error('Error al cargar historial:', error);
+            content.innerHTML = '<p class="text-center text-error">Error al cargar historial</p>';
         }
     }
 
@@ -262,7 +387,12 @@ window.logout = async function() {
 };
 
 window.irAReservar = () => {
-    document.querySelector('[data-section="reservar"]').click();
+    const reservarNav = document.querySelector('[data-section="reservar"]');
+    if (reservarNav) {
+        reservarNav.click();
+    } else {
+        console.error('No se encontró el elemento de navegación "reservar"');
+    }
 };
 
 window.cancelarTurno = async function(id) {
@@ -273,19 +403,25 @@ window.cancelarTurno = async function(id) {
     await window.ModalManager.confirm(
         'Cancelar Turno',
         '¿Estás seguro de que deseas cancelar este turno? Esta acción no se puede deshacer.',
-        () => {
-            const result = TurnosManager.cancel(id);
-            if (result.success) {
-                NotificationManager.success('Turno cancelado exitosamente');
-                if (window.dashboard) {
-                    window.dashboard.loadDashboard();
-                    window.dashboard.loadTurnos();
+        async () => {
+            try {
+                const result = await TurnosManager.cancel(id);
+                if (result.success) {
+                    NotificationManager.success('Turno cancelado exitosamente');
+                    if (window.dashboard) {
+                        await window.dashboard.loadDashboard();
+                        await window.dashboard.loadTurnos();
+                    } else {
+                        const dashboard = new PacienteDashboard();
+                        await dashboard.loadDashboard();
+                        await dashboard.loadTurnos();
+                    }
                 } else {
-                    new PacienteDashboard().loadDashboard();
-                    new PacienteDashboard().loadTurnos();
+                    NotificationManager.error(result.message || 'Error al cancelar el turno');
                 }
-            } else {
-                NotificationManager.error(result.message || 'Error al cancelar el turno');
+            } catch (error) {
+                console.error('Error al cancelar turno:', error);
+                NotificationManager.error(error.message || 'Error al cancelar el turno');
             }
         }
     );
@@ -313,6 +449,18 @@ window.editarPerfil = async function() {
     await window.ModalManager.openPacienteModal(paciente);
 };
 
-const pacienteDashboard = new PacienteDashboard();
-window.dashboard = pacienteDashboard; // Hacer disponible globalmente
+// Inicializar dashboard cuando el DOM esté listo
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', async () => {
+        const pacienteDashboard = new PacienteDashboard();
+        await pacienteDashboard.init();
+        window.dashboard = pacienteDashboard; // Hacer disponible globalmente
+    });
+} else {
+    (async () => {
+        const pacienteDashboard = new PacienteDashboard();
+        await pacienteDashboard.init();
+        window.dashboard = pacienteDashboard; // Hacer disponible globalmente
+    })();
+}
 
