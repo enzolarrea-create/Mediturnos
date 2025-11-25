@@ -49,7 +49,8 @@ class MediTurnosApp {
         } else {
             // Si no está en landing y no está autenticado, redirigir a landing
             if (!AuthManager.isAuthenticated()) {
-                window.location.href = 'landing.html';
+                // Usar ruta desde la raíz del sitio para evitar resoluciones relativas como views/paciente/landing.html
+                window.location.href = '/landing.html';
             }
         }
     }
