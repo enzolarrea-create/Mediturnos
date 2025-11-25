@@ -88,13 +88,14 @@ export class AuthManager {
 
         delete newUser.confirmPassword;
 
-        // Si es paciente, crear registro de paciente y vincularlo al usuario
+        users.push(newUser);
+        StorageManager.set(CONFIG.STORAGE.USERS, users);
+
+        // Si es paciente, crear registro de paciente
         if (newUser.rol === CONFIG.ROLES.PACIENTE) {
             const pacientes = StorageManager.get(CONFIG.STORAGE.PACIENTES) || [];
-            const pacienteId = Date.now() + 1;
-            
             pacientes.push({
-                id: pacienteId,
+                id: Date.now() + 1,
                 nombre: newUser.nombre,
                 apellido: newUser.apellido,
                 dni: newUser.dni || '',
@@ -105,21 +106,10 @@ export class AuthManager {
                 ultimaVisita: null,
                 activo: true
             });
-
-            // Guardar el ID del paciente en el usuario
-            newUser.pacienteId = pacienteId;
-
             StorageManager.set(CONFIG.STORAGE.PACIENTES, pacientes);
         }
 
-        users.push(newUser);
-        StorageManager.set(CONFIG.STORAGE.USERS, users);
-
-        // Iniciar sesión automáticamente con el nuevo usuario (sin contraseña)
-        const { password: _, ...userSafe } = newUser;
-        StorageManager.set(CONFIG.STORAGE.CURRENT_USER, userSafe);
-
-        return { success: true, user: userSafe };
+        return { success: true, user: newUser };
     }
 }
 

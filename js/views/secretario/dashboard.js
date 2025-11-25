@@ -37,11 +37,9 @@ class SecretarioDashboard {
                 const section = document.getElementById(item.getAttribute('data-section'));
                 if (section) {
                     section.classList.add('active');
-                    const sectionId = item.getAttribute('data-section');
-                    if (sectionId === 'dashboard') this.loadDashboard();
-                    else if (sectionId === 'turnos') this.loadTurnos();
-                    else if (sectionId === 'pacientes') this.loadPacientes();
-                    else if (sectionId === 'calendario') this.loadCalendario();
+                    if (item.getAttribute('data-section') === 'dashboard') this.loadDashboard();
+                    else if (item.getAttribute('data-section') === 'turnos') this.loadTurnos();
+                    else if (item.getAttribute('data-section') === 'pacientes') this.loadPacientes();
                 }
             });
         });
@@ -144,95 +142,6 @@ class SecretarioDashboard {
         }
         await window.ModalManager.openTurnoModal();
     }
-
-    loadCalendario() {
-        const container = document.getElementById('calendar-view');
-        if (!container) return;
-
-        // Limpiar contenido previo
-        container.innerHTML = '';
-
-        // Obtener todos los turnos
-        const turnos = TurnosManager.getAll();
-
-        // Mapear estados a colores
-        const estadoColors = {
-            [CONFIG.TURNO_ESTADOS.PENDIENTE]: '#fbbf24',   // amarillo
-            [CONFIG.TURNO_ESTADOS.CONFIRMADO]: '#22c55e', // verde
-            [CONFIG.TURNO_ESTADOS.EN_CURSO]: '#3b82f6',   // azul
-            [CONFIG.TURNO_ESTADOS.COMPLETADO]: '#6b7280', // gris
-            [CONFIG.TURNO_ESTADOS.CANCELADO]: '#ef4444',  // rojo
-            [CONFIG.TURNO_ESTADOS.NO_ASISTIO]: '#a855f7'  // violeta
-        };
-
-        const events = turnos.map(t => {
-            const paciente = PacientesManager.getById(t.pacienteId);
-            const medico = MedicosManager.getById(t.medicoId);
-
-            const titleParts = [];
-            if (paciente) titleParts.push(`${paciente.nombre} ${paciente.apellido}`);
-            if (medico) titleParts.push(medico.nombre);
-
-            const title = titleParts.join(' - ') || 'Turno';
-
-            // Construir fecha-hora en formato ISO simple
-            const start = `${t.fecha}T${t.hora}:00`;
-
-            // Normalizar clase de estado para usar en CSS (en_curso, no_asistio, etc.)
-            const estadoClass = (t.estado || '').toString().toLowerCase().replace(/\s+/g, '_');
-
-            return {
-                id: String(t.id),
-                title: title,
-                start: start,
-                extendedProps: {
-                    estado: t.estado,
-                    pacienteNombre: paciente ? `${paciente.nombre} ${paciente.apellido}` : 'N/A',
-                    medicoNombre: medico ? medico.nombre : 'N/A',
-                    motivo: t.motivo || '',
-                    estadoClass
-                },
-                backgroundColor: estadoColors[t.estado] || '#0ea5e9',
-                borderColor: estadoColors[t.estado] || '#0ea5e9',
-                classNames: estadoClass ? [`estado-${estadoClass}`] : []
-            };
-        });
-
-        // Crear calendario FullCalendar (usa objeto global FullCalendar)
-        const calendar = new FullCalendar.Calendar(container, {
-            initialView: 'timeGridWeek',
-            locale: 'es',
-            slotMinTime: '08:00:00',
-            slotMaxTime: '19:00:00',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-            },
-            buttonText: {
-                today: 'Hoy',
-                month: 'Mes',
-                week: 'Semana',
-                day: 'Día',
-                list: 'Lista'
-            },
-            events,
-            eventClick: (info) => {
-                const e = info.event;
-                const props = e.extendedProps || {};
-                const detalle = `
-Paciente: ${props.pacienteNombre}
-Médico: ${props.medicoNombre}
-Fecha y hora: ${e.start.toLocaleString()}
-Estado: ${props.estado}
-Motivo: ${props.motivo || 'Sin especificar'}
-                `.trim();
-                NotificationManager.info(detalle.replace(/\n/g, '<br>'));
-            }
-        });
-
-        calendar.render();
-    }
 }
 
 window.logout = async function() {
@@ -278,7 +187,6 @@ window.cancelTurno = async function(id) {
                 if (window.dashboard) {
                     window.dashboard.loadTurnos();
                     window.dashboard.loadDashboard();
-                    window.dashboard.loadCalendario && window.dashboard.loadCalendario();
                 } else {
                     new SecretarioDashboard().loadTurnos();
                 }
